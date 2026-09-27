@@ -11,6 +11,7 @@ OpenClass 桌面宿主 —— pywebview + WebView2 + 系统托盘常驻。
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 from pathlib import Path
