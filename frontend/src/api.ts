@@ -96,6 +96,9 @@ export interface OcApi {
   market_uninstall(pluginId: string): Promise<any>
   market_index_url(): Promise<any>
   market_set_index_url(url: string): Promise<any>
+  app_log_tail(lines?: number): Promise<any>
+  app_log_clear(): Promise<any>
+  open_log_folder(): Promise<boolean>
   search_music(keyword?: string): Promise<any[]>
   music_url(path: string): Promise<string>
   search_music_online(keyword: string, platform?: string): Promise<any[]>
@@ -284,6 +287,9 @@ const MOCK_API: OcApi = {
   async market_uninstall() { return { ok: false, message: '开发预览模式' } },
   async market_index_url() { return { url: '', default: '' } },
   async market_set_index_url() { return { ok: false, message: '开发预览模式' } },
+  async app_log_tail() { return { text: '', path: '', dir: '', size: 0, exists: false } },
+  async app_log_clear() { return { ok: true, message: '开发预览模式' } },
+  async open_log_folder() { return false },
   async search_music() { return [] },
   async music_url(path) { return path },
   async search_music_online() { return [] },

@@ -334,6 +334,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
+    # 运行日志：把启动信息与未捕获异常落到 data/logs/app.log，
+    # 现场反馈问题时可以直接看这份日志定位
+    from .core.applog import install_hooks, log_startup
+
+    install_hooks()
+    try:
+        from . import __version__ as _current_version  # type: ignore[attr-defined]
+
+        log_startup(_current_version)
+    except ImportError:
+        log_startup()
+
     # 单实例：重复启动时唤起已有窗口并直接退出（避免开多个）
     if not (args.register_openwith or args.unregister_openwith):
         if not ensure_single_instance():

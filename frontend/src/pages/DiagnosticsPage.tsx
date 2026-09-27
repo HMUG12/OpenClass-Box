@@ -14,7 +14,7 @@ function formatSize(bytes: number): string {
   return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`
 }
 
-type Tab = 'process' | 'service' | 'startup'
+type Tab = 'process' | 'service' | 'startup' | 'log'
 
 export default function DiagnosticsPage() {
   const [packBusy, setPackBusy] = useState(false)
@@ -30,6 +30,34 @@ export default function DiagnosticsPage() {
   const [startup, setStartup] = useState<any[]>([])
 
   const [tab, setTab] = useState<Tab>('process')
+
+  // ── 运行日志 ──
+  const [logText, setLogText] = useState('')
+  const [logInfo, setLogInfo] = useState<any>(null)
+
+  const loadLog = async () => {
+    try {
+      const result = await api.app_log_tail(300)
+      setLogText(result?.text ?? '')
+      setLogInfo(result ?? null)
+    } catch {
+      setLogText('')
+    }
+  }
+
+  const clearLog = async () => {
+    try {
+      const result = await api.app_log_clear()
+      setMsg(result?.message ?? '')
+      await loadLog()
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'log') void loadLog()
+  }, [tab])
 
   const loadProcesses = async () => {
     setProcBusy(true)
@@ -119,6 +147,9 @@ export default function DiagnosticsPage() {
           <Button appearance="secondary" onClick={() => setTab('startup')}>
             启动项
           </Button>
+          <Button appearance="secondary" onClick={() => setTab('log')}>
+            运行日志
+          </Button>
         </div>
         {msg && (
           <div className="oc-list-sub" style={{ marginTop: 8 }}>
@@ -126,6 +157,66 @@ export default function DiagnosticsPage() {
           </div>
         )}
       </div>
+
+      {/* ── 运行日志 ── */}
+      {tab === 'log' && (
+        <div className="oc-panel" style={{ marginTop: 12 }}>
+          <div className="oc-panel-title">
+            运行日志
+            <Button
+              size="small"
+              appearance="secondary"
+              style={{ marginLeft: 10 }}
+              onClick={() => void loadLog()}
+            >
+              刷新
+            </Button>
+            <Button
+              size="small"
+              appearance="secondary"
+              style={{ marginLeft: 6 }}
+              onClick={() => void clearLog()}
+            >
+              清理
+            </Button>
+            <Button
+              size="small"
+              appearance="secondary"
+              style={{ marginLeft: 6 }}
+              onClick={() => void api.open_log_folder()}
+            >
+              打开日志目录
+            </Button>
+          </div>
+          <div className="oc-list-sub" style={{ marginBottom: 8 }}>
+            {logInfo?.exists
+              ? `日志文件：${logInfo.path}（${formatSize(logInfo.size)}）`
+              : '还没有日志文件：程序运行期间的异常与关键操作会记录在这里'}
+          </div>
+          <pre
+            style={{
+              maxHeight: 380,
+              overflow: 'auto',
+              margin: 0,
+              padding: 12,
+              borderRadius: 'var(--oc-radius)',
+              background: 'var(--oc-surface)',
+              border: '1px solid var(--oc-border)',
+              fontSize: 12,
+              lineHeight: 1.65,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              userSelect: 'text',
+            }}
+          >
+            {logText || '（暂无日志）'}
+          </pre>
+          <div className="oc-list-sub" style={{ marginTop: 8 }}>
+            日志只记录程序自身的异常与关键操作（修复、导出、插件安装等），不含个人文件内容；
+            文件超过 1 MB 会自动轮转，最多保留 3 份。
+          </div>
+        </div>
+      )}
 
       {/* ── 进程 ── */}
       {tab === 'process' && (

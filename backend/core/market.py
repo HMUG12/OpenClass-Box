@@ -393,6 +393,13 @@ def install(
     except Exception:
         pass
 
+    try:
+        from .applog import log
+
+        log("安装插件", plugin=plugin_id, version=version, bytes=size)
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "message": f"已安装插件「{plugin_id}」{(f' v{version}' if version else '')}"
@@ -462,6 +469,13 @@ def uninstall(plugin_id: str) -> dict[str, Any]:
         from .registry import tool_registry
 
         tool_registry.scan()
+    except Exception:
+        pass
+
+    try:
+        from .applog import log
+
+        log("卸载插件", plugin=plugin_id)
     except Exception:
         pass
 

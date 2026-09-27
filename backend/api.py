@@ -758,9 +758,16 @@ class Api:
 
     def run_repair(self, key: str) -> dict[str, Any]:
         """执行一个修复动作（需要管理员的会弹 UAC 确认）。"""
+        from .core.applog import log
         from .core.repair import run_repair
 
-        return run_repair(key)
+        result = run_repair(key)
+        log(
+            f"执行修复：{key}",
+            "INFO" if result.get("ok") else "WARN",
+            result=str(result.get("message", ""))[:160],
+        )
+        return result
 
     def export_report(self) -> dict[str, Any]:
         """导出报修信息报告到桌面，返回 {ok, path, content}。"""
@@ -812,9 +819,31 @@ class Api:
 
     def export_diagnostics(self) -> dict[str, Any]:
         """生成诊断包（系统信息 + 体检 + 事件日志）到桌面。"""
+        from .core.applog import log
         from .core.logs import export
 
-        return export()
+        result = export()
+        log("生成诊断包", "INFO" if result.get("ok") else "WARN", path=result.get("path", ""))
+        return result
+
+    def app_log_tail(self, lines: int = 200) -> dict[str, Any]:
+        """最近的运行日志（异常与关键操作，用于反馈问题）。"""
+        from .core.applog import stats, tail
+
+        return {"text": tail(lines), **stats()}
+
+    def app_log_clear(self) -> dict[str, Any]:
+        """清理运行日志。"""
+        from .core.applog import clear
+
+        return clear()
+
+    def open_log_folder(self) -> bool:
+        """打开日志目录。"""
+        from .core.applog import log_dir
+
+        ok, _ = open_in_explorer(log_dir())
+        return ok
 
     def list_processes(self, limit: int = 40) -> dict[str, Any]:
         """按内存占用列出进程。"""
