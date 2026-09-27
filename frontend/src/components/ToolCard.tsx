@@ -6,14 +6,21 @@ interface Props {
   onLaunch: (tool: ToolSpec) => void
 }
 
-const KIND_LABEL: Record<ToolSpec['kind'], { text: string; cls: string }> = {
+const KIND_LABEL: Record<string, { text: string; cls: string }> = {
   builtin: { text: '内置', cls: '' },
   plugin: { text: '插件', cls: 'plugin' },
   external: { text: '外部', cls: 'external' },
+  web: { text: '网页', cls: 'plugin' },
+}
+
+/** 兜底：清单里出现未知 kind 时也不能让整页崩掉（这里曾经崩过整屏） */
+function kindOf(kind: string | undefined): { text: string; cls: string } {
+  if (kind && KIND_LABEL[kind]) return KIND_LABEL[kind]
+  return { text: kind ? String(kind) : '工具', cls: '' }
 }
 
 export default function ToolCard({ tool, onLaunch }: Props) {
-  const kind = KIND_LABEL[tool.kind]
+  const kind = kindOf(tool.kind)
   const disabled = !tool.available
   const canDownload = disabled && !!tool.download
 

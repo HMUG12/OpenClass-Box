@@ -33,6 +33,16 @@ CATEGORY_NAMES: dict[str, str] = {
 _MANIFEST = "tool.json"
 _SCRIPT_SUFFIXES = (".py", ".exe", ".bat", ".cmd", ".ps1")
 
+# 已知工具类型：builtin=自带、plugin=插件、external=外部程序、web=网页工具。
+# 清单里写的 kind 必须先过白名单 —— 前端按 kind 渲染标签，出现未知值
+# 会让整页崩掉（工具箱、系统状态都复用工具卡片，曾经真的崩过）。
+_KNOWN_KINDS = {"builtin", "plugin", "external", "web"}
+
+
+def _normalize_kind(value: object, fallback: str = "plugin") -> str:
+    text = str(value or "").strip().lower()
+    return text if text in _KNOWN_KINDS else fallback
+
 
 @dataclass
 class ToolSpec:
@@ -147,7 +157,7 @@ class ToolRegistry:
             icon=raw.get("icon", "🧩"),
             version=raw.get("version", "1.0.0"),
             author=raw.get("author", "未知"),
-            kind=kind or raw.get("kind", "plugin"),
+            kind=_normalize_kind(kind or raw.get("kind"), "plugin"),
             entry=raw.get("entry", ""),
             args=list(raw.get("args", [])),
             admin=bool(raw.get("admin", False)),

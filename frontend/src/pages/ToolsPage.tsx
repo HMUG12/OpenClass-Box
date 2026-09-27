@@ -24,6 +24,7 @@ const KIND_NAMES: Record<string, string> = {
   all: '全部来源',
   builtin: '自带',
   plugin: '插件',
+  web: '网页',
   external: '外部程序',
 }
 

@@ -165,8 +165,47 @@ def main() -> int:
     except Exception as exc:  # 签名失败不影响产物可用
         print(f"[pack] 跳过签名：{exc}")
 
-    print(f"[pack] 完成：{exe}")
-    return 0
+    # 启动自检：产物必须能真的跑起来。之前出现过「打包成功但一启动就
+    # NameError 崩溃」，只靠编译通过看不出来，所以这里真跑一次。
+    smoke = _smoke_test(exe)
+
+    print(f"[pack] 完成：{exe}" + ("" if smoke else "（但启动自检未通过，请检查！）"))
+    return 0 if smoke else 1
+
+
+def _smoke_test(exe: Path, seconds: int = 10) -> bool:
+    """启动产物并观察若干秒：进程仍在运行即视为通过。"""
+    if not exe.is_file():
+        print("[pack] 启动自检失败：找不到 exe")
+        return False
+    if os.environ.get("OC_SKIP_SMOKE") == "1":
+        print("[pack] 已按环境变量跳过启动自检")
+        return True
+
+    print(f"[pack] 启动自检：运行 {seconds} 秒观察是否崩溃…")
+    try:
+        proc = subprocess.Popen(
+            [str(exe)],
+            cwd=str(exe.parent),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        print(f"[pack] 启动自检失败：无法启动（{exc}）")
+        return False
+
+    time.sleep(seconds)
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=6)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        print("[pack] 启动自检通过：进程运行正常")
+        return True
+
+    print(f"[pack] 启动自检失败：进程提前退出，返回码 {proc.returncode}")
+    return False
 
 
 if __name__ == "__main__":
