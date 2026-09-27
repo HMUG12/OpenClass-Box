@@ -59,9 +59,7 @@ def _loop() -> None:
                         result = check_url(url)
                         record(result, "clipboard")  # 全部记录，供安全中心展示
                         if result["level"] != "safe":
-                            with _lock:
-                                _alerts.append(result)
-                                del _alerts[:-_MAX_ALERTS]
+                            push_alert(result)
         except Exception:
             pass
         time.sleep(_INTERVAL)
@@ -77,7 +75,27 @@ def start() -> None:
 
 
 def push_alert(result: dict[str, Any]) -> None:
-    """外部来源（如浏览器监听）投递一条风险告警。"""
+    """投递一条风险告警：弹系统通知 + 留给界面横幅。
+
+    系统通知是关键：老师上课时窗口多半最小化或收在托盘里，
+    只在界面里显示横幅等于没提醒到人。
+    """
+    try:
+        from ..system.notify import notify
+
+        level = str(result.get("level") or "")
+        url = str(result.get("url") or "")
+        reasons = result.get("reasons") or []
+        detail = str(reasons[0]) if reasons else "请留意链接来源，不要输入账号密码"
+        label = "高危网址" if level == "danger" else "可疑网址"
+        notify(
+            "OpenClass 安全提醒",
+            f"{label}（{result.get('score', 0)} 分）：{url[:70]}\n{detail}",
+            key="url-alert",
+        )
+    except Exception:
+        pass
+
     with _lock:
         _alerts.append(result)
         del _alerts[:-_MAX_ALERTS]

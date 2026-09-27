@@ -163,6 +163,13 @@ class AppHost:
         self.api = Api()
         self.window = None
         self.tray = TrayIcon(self._show, self._quit)
+        # 安全告警走系统通知：老师上课时窗口可能收在托盘里，只在界面提示等于没提醒
+        try:
+            from .system.notify import set_sink
+
+            set_sink(self.tray.notify)
+        except Exception:
+            pass
 
     def _show(self) -> None:
         if self.window is None:

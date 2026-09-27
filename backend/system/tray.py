@@ -47,6 +47,16 @@ class TrayIcon:
         self._icon = pystray.Icon("OpenClass-Box", _make_icon(), "OpenClass-Box", menu)
         threading.Thread(target=self._icon.run, daemon=True).start()
 
+    def notify(self, title: str, message: str) -> bool:
+        """托盘气泡通知（安全告警用它弹给用户，不依赖窗口是否打开）。"""
+        if self._icon is None:
+            return False
+        try:
+            self._icon.notify(message, title)
+            return True
+        except Exception:
+            return False
+
     def stop(self) -> None:
         if self._icon is not None:
             self._icon.stop()
