@@ -209,16 +209,36 @@ class ToolRegistry:
         return entries[0] if entries else None
 
     def _guess_external(self, folder: Path) -> ToolSpec | None:
-        """目录中没有 tool.json：当作第三方绿色工具自动识别。"""
+        """目录中没有 tool.json：当作第三方绿色工具自动识别。
+
+        入口选择的优先级很关键：像 mpv 这种目录里同时躺着 mpv.exe 和
+        mpv-register.bat，按纯字母序会把 .bat 选中（'-' 排在 '.' 前面），
+        用户点开就变成执行注册脚本而不是打开播放器 —— 看起来就像「工具不见了」。
+        所以按「像不像主程序」排序：
+          1. 与目录同名的 .exe（mpv/mpv.exe）
+          2. 其他 .exe
+          3. .bat / .cmd / .ps1 / .com
+          4. 其余（.html 等）
+        """
         try:
-            candidates = [
-                p for p in sorted(folder.iterdir()) if p.is_file() and is_executable(p)
-            ]
+            candidates = [p for p in folder.iterdir() if p.is_file() and is_executable(p)]
         except OSError:
             return None
         if not candidates:
             return None
-        entry = candidates[0]
+
+        def rank(item: Path) -> tuple[int, str]:
+            suffix = item.suffix.lower()
+            same_name = item.stem.lower() == folder.name.lower()
+            if suffix == ".exe" and same_name:
+                return (0, item.name.lower())
+            if suffix == ".exe":
+                return (1, item.name.lower())
+            if suffix in (".bat", ".cmd", ".ps1", ".com"):
+                return (2, item.name.lower())
+            return (3, item.name.lower())
+
+        entry = sorted(candidates, key=rank)[0]
         return ToolSpec(
             id=folder.name,
             name=folder.name,

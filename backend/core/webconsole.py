@@ -638,40 +638,14 @@ def _run(args: list[str], timeout: float = 12.0) -> str:
 
 
 def firewall_status() -> dict[str, Any]:
-    """检查入站放行规则是否存在。"""
-    if os.name != "nt":
-        return {"supported": False, "allowed": True, "message": "非 Windows 系统无需放行"}
-    output = _run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={_FIREWALL_RULE}"])
-    allowed = "OpenClass-Box" in output
-    return {
-        "supported": True,
-        "allowed": allowed,
-        "rule": _FIREWALL_RULE,
-        "message": "已放行" if allowed else "未放行：手机可能连不上（防火墙默认拦截入站）",
-    }
+    """放行状态（转发到统一的局域网放行模块，覆盖全部端口）。"""
+    from .firewall import status
+
+    return status()
 
 
 def allow_firewall() -> dict[str, Any]:
-    """添加防火墙放行规则（管理员权限，弹 UAC）。"""
-    if os.name != "nt":
-        return {"ok": False, "message": "仅支持 Windows"}
-    port = _port or DEFAULT_PORT
-    command = (
-        f'netsh advfirewall firewall delete rule name="{_FIREWALL_RULE}" >nul 2>nul & '
-        f'netsh advfirewall firewall add rule name="{_FIREWALL_RULE}" dir=in action=allow '
-        f"protocol=TCP localport={port} profile=private,domain"
-    )
-    try:
-        import ctypes
+    """放行局域网端口（转发到统一模块：手机控制台 + 临时传输 + 机房协同 + 发现）。"""
+    from .firewall import allow
 
-        result = ctypes.windll.shell32.ShellExecuteW(  # type: ignore[attr-defined]
-            None, "runas", "cmd.exe", f"/c {command}", None, 0
-        )
-    except Exception as exc:
-        return {"ok": False, "message": f"提权失败：{exc}"}
-    if result <= 32:
-        return {"ok": False, "message": "已取消或提权失败（需要管理员同意）"}
-    return {
-        "ok": True,
-        "message": f"已请求放行 TCP {port}（仅专用/域网络）。请在系统弹窗中确认后刷新状态。",
-    }
+    return allow()

@@ -157,6 +157,18 @@ export interface OcApi {
   guard_killed_log(): Promise<any[]>
   check_url_deep(url: string): Promise<any>
   clear_url_cache(): Promise<any>
+  firewall_status(): Promise<any>
+  firewall_allow(): Promise<any>
+  firewall_revoke(): Promise<any>
+  passcode_status(): Promise<any>
+  passcode_check(page: string): Promise<any>
+  passcode_verify(code: string): Promise<any>
+  passcode_set(current: string, newCode: string, protectedPages?: string[]): Promise<any>
+  passcode_set_protected(pages: string[]): Promise<any>
+  passcode_lock(): Promise<any>
+  passcode_clear(current: string): Promise<any>
+  restore_protection(): Promise<any>
+  restore_last_result(): Promise<any>
   search_music(keyword?: string): Promise<any[]>
   music_url(path: string): Promise<string>
   search_music_online(keyword: string, platform?: string): Promise<any[]>
@@ -433,6 +445,20 @@ const MOCK_API: OcApi = {
   async guard_killed_log() { return [] },
   async check_url_deep() { return { url: '', score: 0, level: 'safe', reasons: ['开发预览模式'], mode: 'deep' } },
   async clear_url_cache() { return { ok: true, cleared: 0 } },
+  async firewall_status() {
+    return { supported: true, allowed: false, tcp: false, udp: false, ports: [38610, 38620, 38900], discoveryPort: 38901, rules: [], message: '开发预览模式' }
+  },
+  async firewall_allow() { return { ok: false, message: '开发预览模式' } },
+  async firewall_revoke() { return { ok: false, message: '开发预览模式' } },
+  async passcode_status() { return { enabled: false, protected: [], unlocked: true, pages: {}, hint: '' } },
+  async passcode_check() { return { page: '', need: false } },
+  async passcode_verify() { return { ok: false, message: '开发预览模式' } },
+  async passcode_set() { return { ok: false, message: '开发预览模式' } },
+  async passcode_set_protected() { return { ok: false, message: '开发预览模式' } },
+  async passcode_lock() { return { ok: true, message: '开发预览模式' } },
+  async passcode_clear() { return { ok: false, message: '开发预览模式' } },
+  async restore_protection() { return { known: true, enabled: null, message: '' } },
+  async restore_last_result() { return { ok: false, message: '开发预览模式' } },
   async search_music() { return [] },
   async music_url(path) { return path },
   async search_music_online() { return [] },

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Button,
   FluentProvider,
+  Input,
   webLightTheme,
   webDarkTheme,
   MessageBar,
@@ -60,6 +62,14 @@ type PageId =
   | 'settings'
   | 'about'
 
+/** 受密码保护的页面名称（与后端 passcode.PAGES 对应） */
+const PAGE_LABEL: Record<string, string> = {
+  settings: '设置',
+  security: '安全',
+  tasks: '定时任务',
+  lan: '机房管理',
+}
+
 interface Toast {
   ok: boolean
   message: string
@@ -75,6 +85,11 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null)
   const [version, setVersion] = useState('')
   const [hasUpdate, setHasUpdate] = useState(false)
+
+  // ── 密码保护：受保护页面进入前需要解锁 ──
+  const [unlockTarget, setUnlockTarget] = useState('')
+  const [unlockCode, setUnlockCode] = useState('')
+  const [unlockMsg, setUnlockMsg] = useState('')
 
   // ── 初始加载 ──
   useEffect(() => {
@@ -116,6 +131,39 @@ export default function App() {
   }, [])
 
   const isDark = themeMode === 'system' ? systemDark : themeMode === 'dark'
+
+  // 切换页面：受保护的页面先要密码
+  const selectPage = useCallback(async (id: string) => {
+    try {
+      const check = await api.passcode_check(id)
+      if (check?.need) {
+        setUnlockTarget(id)
+        setUnlockCode('')
+        setUnlockMsg('')
+        return
+      }
+    } catch {
+      /* 查不到保护状态时按未保护处理，不挡正常使用 */
+    }
+    setPage(id as PageId)
+  }, [])
+
+  const tryUnlock = useCallback(async () => {
+    try {
+      const result = await api.passcode_verify(unlockCode)
+      if (result?.ok) {
+        const target = unlockTarget
+        setUnlockTarget('')
+        setUnlockCode('')
+        setUnlockMsg('')
+        if (target) setPage(target as PageId)
+      } else {
+        setUnlockMsg(result?.message ?? '密码不正确')
+      }
+    } catch {
+      setUnlockMsg('校验失败，请重试')
+    }
+  }, [unlockCode, unlockTarget])
 
   const refresh = useCallback(async () => {
     await api.refresh_tools()
@@ -245,7 +293,7 @@ export default function App() {
         <SideNav
           items={navItems}
           activeId={page}
-          onSelect={(id) => setPage(id as PageId)}
+          onSelect={(id) => void selectPage(id)}
           version={version}
         />
 
@@ -266,10 +314,63 @@ export default function App() {
             <ErrorBoundary key={page}>{renderPage()}</ErrorBoundary>
           )}
 
-          {/* 右下角版本标识 */}
-          <div className="oc-version-badge">v{version || '0.1.4 Beta'}</div>
         </div>
       </div>
+
+      {/* 密码保护：受保护页面的解锁窗口 */}
+      {unlockTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+        >
+          <div className="oc-panel" style={{ width: 340, margin: 0 }}>
+            <div className="oc-panel-title">需要密码</div>
+            <div className="oc-hint" style={{ marginBottom: 10 }}>
+              「{PAGE_LABEL[unlockTarget] ?? unlockTarget}」受密码保护，输入密码后进入。
+            </div>
+            <Input
+              type="password"
+              value={unlockCode}
+              onChange={(_e, data) => setUnlockCode(data.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void tryUnlock()
+              }}
+              placeholder="请输入密码"
+              autoFocus
+              style={{ width: '100%' }}
+            />
+            {unlockMsg && (
+              <div className="oc-list-warn" style={{ marginTop: 8 }}>
+                {unlockMsg}
+              </div>
+            )}
+            <div className="oc-actions" style={{ marginTop: 12 }}>
+              <Button appearance="primary" onClick={() => void tryUnlock()}>
+                解锁
+              </Button>
+              <Button
+                appearance="secondary"
+                onClick={() => {
+                  setUnlockTarget('')
+                  setUnlockMsg('')
+                }}
+              >
+                取消
+              </Button>
+            </div>
+            <div className="oc-hint" style={{ marginTop: 8 }}>
+              忘记密码：删除数据目录下的 passcode.json 即可复位（设置 → 存储位置可看到路径）。
+            </div>
+          </div>
+        </div>
+      )}
     </FluentProvider>
   )
 }

@@ -71,6 +71,56 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [lanMsg, setLanMsg] = useState('')
   const [lanBusy, setLanBusy] = useState(false)
 
+  // ── 局域网放行 + 密码保护 ──
+  const [fw, setFw] = useState<any>(null)
+  const [pc, setPc] = useState<any>(null)
+  const [pcPages, setPcPages] = useState<string[]>([])
+  const [pcCur, setPcCur] = useState('')
+  const [pcNew, setPcNew] = useState('')
+  const [pcMsg, setPcMsg] = useState('')
+
+  const loadFw = async () => {
+    try {
+      setFw(await api.firewall_status())
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  const loadPc = async () => {
+    try {
+      const status = await api.passcode_status()
+      setPc(status)
+      setPcPages(status?.protected ?? [])
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  const savePasscode = async () => {
+    if (pcNew.trim().length < 4) {
+      setPcMsg('密码至少 4 位')
+      return
+    }
+    const result = await api.passcode_set(pcCur, pcNew, pcPages)
+    setPcMsg(result?.message ?? '')
+    if (result?.ok) {
+      setPcNew('')
+      setPcCur('')
+      await loadPc()
+    }
+  }
+
+  const clearPasscode = async () => {
+    if (!window.confirm('确定关闭密码保护吗？关闭后任何人点开设置都不需要密码。')) return
+    const result = await api.passcode_clear(pcCur)
+    setPcMsg(result?.message ?? '')
+    if (result?.ok) {
+      setPcCur('')
+      await loadPc()
+    }
+  }
+
   // ── 手机控制台 ──
   const [consoleState, setConsoleState] = useState<any>(null)
   const [consoleBusy, setConsoleBusy] = useState(false)
@@ -103,6 +153,14 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
             port: Number(config?.port ?? 38900),
             proxy: config?.proxy ?? '',
           })
+        } catch {
+          /* 忽略 */
+        }
+        try {
+          setFw(await api.firewall_status())
+          const pcStatus = await api.passcode_status()
+          setPc(pcStatus)
+          setPcPages(pcStatus?.protected ?? [])
         } catch {
           /* 忽略 */
         }
@@ -581,6 +639,166 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
             代理支持带账号密码（形如 socks5://user:pass@主机:端口）。局域网的发现与配对
             始终直连，不受代理影响，避免"设了代理就连不上教室里的机器"。
           </div>
+        </div>
+      </div>
+
+      <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
+        局域网放行（手机与跨机功能的前提）
+      </div>
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+          Windows 防火墙默认拦截入站连接：本机能打开的服务，同网段的手机或其他电脑却连不上。
+          手机控制台、临时传输、机房协同都要先放行，这里一次开好。
+        </div>
+        <div className="oc-actions">
+          <Button
+            appearance={fw?.allowed ? 'secondary' : 'primary'}
+            size="small"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              try {
+                const result = await api.firewall_allow()
+                setConsoleMsg(result?.message ?? '')
+                window.setTimeout(() => void loadFw(), 3000)
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {fw?.allowed ? '重新放行' : '一键放行'}
+          </Button>
+          <Button size="small" appearance="secondary" disabled={busy} onClick={() => void loadFw()}>
+            刷新状态
+          </Button>
+          <Button
+            size="small"
+            appearance="transparent"
+            disabled={busy}
+            onClick={async () => {
+              if (!window.confirm('撤销放行后，同网段的手机与其他电脑将无法访问本机服务，确定吗？')) return
+              setBusy(true)
+              try {
+                const result = await api.firewall_revoke()
+                setConsoleMsg(result?.message ?? '')
+                window.setTimeout(() => void loadFw(), 3000)
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            撤销放行
+          </Button>
+          <span className="oc-usage-sub">
+            {fw?.supported === false
+              ? '非 Windows 系统无需放行'
+              : fw?.allowed
+                ? `已放行 TCP ${(fw?.ports ?? []).join('、')} 与 UDP ${fw?.discoveryPort}`
+                : fw?.message || '读取中…'}
+          </span>
+        </div>
+      </div>
+
+      <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
+        密码保护（防止学生改配置）
+      </div>
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+          开启后，点开受保护的页面会先要求输入密码；日常使用（体检、修复、工具箱、音乐、
+          壁纸）不受影响。密码只保存散列值，不存明文。
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {pc?.enabled && (
+            <Input
+              type="password"
+              value={pcCur}
+              onChange={(_e, d) => setPcCur(d.value)}
+              placeholder="当前密码"
+              style={{ width: 150 }}
+            />
+          )}
+          <Input
+            type="password"
+            value={pcNew}
+            onChange={(_e, d) => setPcNew(d.value)}
+            placeholder={pc?.enabled ? '新密码（至少 4 位）' : '设置密码（至少 4 位）'}
+            style={{ width: 180 }}
+          />
+          <Button
+            appearance="primary"
+            size="small"
+            disabled={busy}
+            onClick={() => void savePasscode()}
+          >
+            {pc?.enabled ? '修改密码' : '启用密码保护'}
+          </Button>
+          {pc?.enabled && (
+            <>
+              <Button
+                size="small"
+                appearance="secondary"
+                disabled={busy}
+                onClick={async () => {
+                  const result = await api.passcode_lock()
+                  setPcMsg(result?.message ?? '')
+                  await loadPc()
+                }}
+              >
+                立即重新上锁
+              </Button>
+              <Button size="small" appearance="transparent" disabled={busy} onClick={() => void clearPasscode()}>
+                关闭保护
+              </Button>
+            </>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+          <span className="oc-usage-sub">保护范围：</span>
+          {Object.entries(pc?.pages ?? { settings: '设置', security: '安全', tasks: '定时任务', lan: '机房管理' }).map(
+            ([key, label]) => (
+              <label key={key} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={pcPages.includes(key)}
+                  onChange={() =>
+                    setPcPages((prev) =>
+                      prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]
+                    )
+                  }
+                />
+                {String(label)}
+              </label>
+            )
+          )}
+          {pc?.enabled && (
+            <Button
+              size="small"
+              appearance="secondary"
+              disabled={busy}
+              onClick={async () => {
+                const result = await api.passcode_set_protected(pcPages)
+                setPcMsg(result?.message ?? '')
+                await loadPc()
+              }}
+            >
+              保存保护范围
+            </Button>
+          )}
+          <span className="oc-usage-sub">
+            {pc?.enabled
+              ? pc?.unlocked
+                ? '当前：已解锁（闲置 30 分钟自动重新上锁）'
+                : '当前：已锁定'
+              : '当前：未启用'}
+          </span>
+        </div>
+        {pcMsg && (
+          <div className="oc-usage-sub" style={{ marginTop: 8 }}>
+            {pcMsg}
+          </div>
+        )}
+        <div className="oc-usage-sub" style={{ marginTop: 8 }}>
+          忘记密码：删除数据目录下的 passcode.json 即可复位（删除前请确认是本人操作）。
         </div>
       </div>
 

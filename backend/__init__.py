@@ -1,3 +1,3 @@
 """OpenClass 后端 —— 负责工具发现、进程隔离与系统交互。"""
 
-__version__ = "0.1.4 Beta"
+__version__ = "0.1.5 Beta"

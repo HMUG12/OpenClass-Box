@@ -107,10 +107,25 @@ function RepairPanel() {
     setPkgMsg(result?.message ?? '')
   }
 
+  const checkLastResult = async () => {
+    try {
+      const result = await api.restore_last_result()
+      setPointMsg(result?.message ?? '')
+    } catch {
+      setPointMsg('读取结果失败')
+    }
+  }
+
   const createPoint = async () => {
     setPointBusy(true)
     setPointMsg('')
     try {
+      // 先看系统保护开没开：没开的话 Checkpoint-Computer 必然失败，先说清楚原因
+      const protection = await api.restore_protection()
+      if (protection?.enabled === false) {
+        setPointMsg(protection.message || '系统保护未开启，无法创建还原点')
+        return
+      }
       const result = await api.create_restore_point()
       setPointMsg(result?.message ?? '')
       await loadPoints()
@@ -266,6 +281,9 @@ function RepairPanel() {
           </Button>
           <Button appearance="secondary" onClick={loadPoints} disabled={pointBusy}>
             刷新列表
+          </Button>
+          <Button appearance="secondary" onClick={() => void checkLastResult()} disabled={pointBusy}>
+            查看上次结果
           </Button>
         </div>
         {pointMsg && (

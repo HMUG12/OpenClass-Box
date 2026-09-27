@@ -925,10 +925,28 @@ class Api:
         }
 
     def webconsole_firewall(self) -> dict[str, Any]:
-        """手机控制台的防火墙放行状态。"""
-        from .core.webconsole import firewall_status
+        """局域网放行状态（手机控制台 / 临时传输 / 机房协同 / 发现端口）。"""
+        from .core.firewall import status
 
-        return firewall_status()
+        return status()
+
+    def firewall_status(self) -> dict[str, Any]:
+        """统一的局域网放行状态。"""
+        from .core.firewall import status
+
+        return status()
+
+    def firewall_allow(self) -> dict[str, Any]:
+        """一次放行全部需要的端口（管理员权限，弹 UAC）。"""
+        from .core.firewall import allow
+
+        return allow()
+
+    def firewall_revoke(self) -> dict[str, Any]:
+        """撤销放行规则。"""
+        from .core.firewall import revoke
+
+        return revoke()
 
     def webconsole_allow_firewall(self) -> dict[str, Any]:
         """一键放行防火墙（需要管理员权限，会弹 UAC 确认）。"""
@@ -1248,6 +1266,78 @@ class Api:
         from .core.url_guard import clear_cache
 
         return {"ok": True, "cleared": clear_cache()}
+
+    # ══════════════════════════════════════════════════════
+    # 密码保护（关键页面防误改）
+    # ══════════════════════════════════════════════════════
+
+    def passcode_status(self) -> dict[str, Any]:
+        """密码保护状态（是否启用 / 保护哪些页面 / 是否已解锁）。"""
+        from .core.passcode import status
+
+        return status()
+
+    def passcode_check(self, page: str) -> dict[str, Any]:
+        """进入某个页面前问一句：需要密码吗？"""
+        from .core.passcode import needs_unlock
+
+        return {"page": page, "need": needs_unlock(str(page or ""))}
+
+    def passcode_verify(self, code: str) -> dict[str, Any]:
+        """校验密码。"""
+        from .core.passcode import verify
+
+        return verify(str(code or ""))
+
+    def passcode_set(
+        self, current: str, new_code: str, protected: list[str] | None = None
+    ) -> dict[str, Any]:
+        """设置 / 修改密码（已有密码时需提供当前密码）。"""
+        from .core.passcode import set_passcode
+
+        pages = [str(p) for p in protected] if isinstance(protected, list) else None
+        return set_passcode(str(current or ""), str(new_code or ""), pages)
+
+    def passcode_set_protected(self, pages: list[str]) -> dict[str, Any]:
+        """调整受保护页面。"""
+        from .core.passcode import set_protected
+
+        return set_protected([str(p) for p in (pages or [])])
+
+    def passcode_lock(self) -> dict[str, Any]:
+        """立刻重新上锁。"""
+        from .core.passcode import lock
+
+        return lock()
+
+    def passcode_clear(self, current: str) -> dict[str, Any]:
+        """关闭密码保护。"""
+        from .core.passcode import clear
+
+        return clear(str(current or ""))
+
+    # ══════════════════════════════════════════════════════
+    # 还原点：状态与回执
+    # ══════════════════════════════════════════════════════
+
+    def restore_protection(self) -> dict[str, Any]:
+        """系统保护是否开启（创建还原点的前提）。"""
+        from .core.restore import protection_enabled
+
+        value = protection_enabled()
+        return {
+            "known": value is not None,
+            "enabled": value,
+            "message": ""
+            if value is not False
+            else "系统保护未开启：需先在「此电脑 → 属性 → 系统保护」里给系统盘开启",
+        }
+
+    def restore_last_result(self) -> dict[str, Any]:
+        """查看上一次（提权）创建还原点的回执。"""
+        from .core.restore import last_result
+
+        return last_result()
 
     def get_close_to_tray(self) -> bool:
         """关闭窗口时是否最小化到托盘（默认开启）。"""
