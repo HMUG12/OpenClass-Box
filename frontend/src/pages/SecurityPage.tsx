@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Input, Spinner, Switch } from '@fluentui/react-components'
 import { api } from '../api'
+import SysGuardPanel from '../components/SysGuardPanel'
 
 const LEVEL_TEXT: Record<string, string> = {
   safe: '安全',
@@ -241,6 +242,9 @@ export default function SecurityPage() {
           </div>
         )}
       </div>
+
+      {/* ── 系统防护（篡改修复 / USB / 自启动 / 弹窗 / 高占用）── */}
+      <SysGuardPanel />
 
       {/* ── 白名单 ── */}
       <div className="oc-panel" style={{ marginTop: 12 }}>

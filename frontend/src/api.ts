@@ -116,6 +116,47 @@ export interface OcApi {
   chat_save_file(fileId: string, name: string): Promise<any>
   chat_leave(clearFiles?: boolean): Promise<any>
   chat_clear_received(): Promise<any>
+  tasks_state(): Promise<any>
+  tasks_set_enabled(value: boolean): Promise<any>
+  tasks_add(
+    name: string,
+    kind: string,
+    target: string,
+    args?: string,
+    workdir?: string,
+    triggerType?: string,
+    runTime?: string,
+    weekdays?: string,
+    onceAt?: string,
+    bootDelay?: number
+  ): Promise<any>
+  tasks_update(itemId: string, patch: any): Promise<any>
+  tasks_remove(itemId: string): Promise<any>
+  tasks_run_now(itemId: string): Promise<any>
+  tasks_pick_target(): Promise<any>
+  guard_overview(): Promise<any>
+  guard_scan_hijack(): Promise<any>
+  guard_fix_hosts(lines: number[]): Promise<any>
+  guard_delete_shortcut(path: string): Promise<any>
+  guard_usb_status(): Promise<any>
+  guard_set_usb(storageEnabled?: boolean | null, readOnly?: boolean | null): Promise<any>
+  guard_startup(): Promise<any[]>
+  guard_disable_startup(itemId: string): Promise<any>
+  guard_enable_startup(itemId: string): Promise<any>
+  guard_popup_scan(): Promise<any>
+  guard_popup_kill(pid: number): Promise<any>
+  guard_high_usage(cpuThreshold?: number, memMb?: number): Promise<any>
+  guard_kill_high(pid: number): Promise<any>
+  guard_settings(): Promise<any>
+  set_guard_settings(
+    popupGuard?: boolean,
+    highUsageGuard?: boolean,
+    cpuThreshold?: number,
+    memThresholdMb?: number
+  ): Promise<any>
+  guard_killed_log(): Promise<any[]>
+  check_url_deep(url: string): Promise<any>
+  clear_url_cache(): Promise<any>
   search_music(keyword?: string): Promise<any[]>
   music_url(path: string): Promise<string>
   search_music_online(keyword: string, platform?: string): Promise<any[]>
@@ -344,6 +385,54 @@ const MOCK_API: OcApi = {
   async chat_save_file() { return { ok: false, message: '开发预览模式' } },
   async chat_leave() { return { ok: true, message: '开发预览模式' } },
   async chat_clear_received() { return { ok: true, message: '开发预览模式' } },
+  async tasks_state() {
+    return {
+      enabled: false,
+      items: [],
+      overview: [],
+      logs: [],
+      kinds: { command: '命令', script: '脚本', program: '程序' },
+      triggers: { daily: '每天', weekly: '每周', once: '一次性', boot: '开机后' },
+      weekdays: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+      enabledCount: 0,
+    }
+  },
+  async tasks_set_enabled() { return { ok: false, enabled: false, message: '开发预览模式' } },
+  async tasks_add() { return { ok: false, message: '开发预览模式' } },
+  async tasks_update() { return { ok: false, message: '开发预览模式' } },
+  async tasks_remove() { return { ok: false, message: '开发预览模式' } },
+  async tasks_run_now() { return { ok: false, message: '开发预览模式' } },
+  async tasks_pick_target() { return { ok: false, path: '', message: '开发预览模式' } },
+  async guard_overview() {
+    return {
+      hijack: { issues: [], homepages: [], hostsPath: '', scannedDirs: [], total: 0 },
+      usb: { storageEnabled: null, writeProtected: null, message: '开发预览模式' },
+      startup: { items: [] },
+      popup: { items: [], total: 0, rules: [] },
+      highUsage: { cpuThreshold: 80, memThresholdMB: 1500 },
+      guard: { popup_guard: false, high_usage_guard: false, cpuThreshold: 80, memThresholdMB: 1500 },
+      platform: '',
+    }
+  },
+  async guard_scan_hijack() { return { issues: [], homepages: [], hostsPath: '', scannedDirs: [], total: 0 } },
+  async guard_fix_hosts() { return { ok: false, message: '开发预览模式' } },
+  async guard_delete_shortcut() { return { ok: false, message: '开发预览模式' } },
+  async guard_usb_status() { return { storageEnabled: null, writeProtected: null, message: '开发预览模式' } },
+  async guard_set_usb() { return { ok: false, message: '开发预览模式' } },
+  async guard_startup() { return [] },
+  async guard_disable_startup() { return { ok: false, message: '开发预览模式' } },
+  async guard_enable_startup() { return { ok: false, message: '开发预览模式' } },
+  async guard_popup_scan() { return { items: [], total: 0, rules: [] } },
+  async guard_popup_kill() { return { ok: false, message: '开发预览模式' } },
+  async guard_high_usage() { return { items: [], total: 0, cpuThreshold: 80, memThresholdMB: 1500 } },
+  async guard_kill_high() { return { ok: false, message: '开发预览模式' } },
+  async guard_settings() { return { popup_guard: false, high_usage_guard: false, cpuThreshold: 80, memThresholdMB: 1500 } },
+  async set_guard_settings() {
+    return { ok: false, settings: { popup_guard: false, high_usage_guard: false, cpuThreshold: 80, memThresholdMB: 1500 } }
+  },
+  async guard_killed_log() { return [] },
+  async check_url_deep() { return { url: '', score: 0, level: 'safe', reasons: ['开发预览模式'], mode: 'deep' } },
+  async clear_url_cache() { return { ok: true, cleared: 0 } },
   async search_music() { return [] },
   async music_url(path) { return path },
   async search_music_online() { return [] },

@@ -185,6 +185,26 @@ class AppHost:
         self.window.show()
 
     def _quit(self) -> None:
+        # 还有启用中的定时任务时先问一句：否则用户会以为任务还在后台跑
+        try:
+            from .core import tasks
+
+            count = tasks.enabled_count()
+            if count:
+                import ctypes
+
+                text = (
+                    f"还有 {count} 个定时任务处于启用状态。\n\n"
+                    "退出后这些任务不会再执行（下次启动程序后会继续）。\n确定要退出吗？"
+                )
+                answer = ctypes.windll.user32.MessageBoxW(  # type: ignore[attr-defined]
+                    None, text, "OpenClass-Box · 定时任务", 0x04 | 0x30
+                )
+                if answer != 6:  # IDYES
+                    return
+        except Exception:
+            pass
+
         try:
             self.tray.stop()
         except Exception:
@@ -298,6 +318,24 @@ class AppHost:
             pass
 
         self.tray.start()
+
+        # 本机定时任务调度器：总开关关闭时它只是空转，不会有任何执行
+        try:
+            from .core.tasks import runner
+
+            runner.start()
+        except Exception:
+            pass
+
+        # 安全守护：弹窗拦截 / 高占用提醒（都必须在设置里显式开启）
+        try:
+            from .core.guard import guard_settings, watchdog
+
+            settings = guard_settings()
+            if settings.get("popup_guard") or settings.get("high_usage_guard"):
+                watchdog.start()
+        except Exception:
+            pass
 
         # 启动角色：A 端（服务端）自动拉起管理服务；B 端恢复客户端身份
         if role and role != "auto":

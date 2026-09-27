@@ -66,6 +66,11 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [firewall, setFirewall] = useState<any>(null)
   const [allowPower, setAllowPower] = useState(false)
 
+  // ── 远程管理（机房连通方式）──
+  const [lan, setLan] = useState({ serverUrl: '', port: 38900, proxy: '' })
+  const [lanMsg, setLanMsg] = useState('')
+  const [lanBusy, setLanBusy] = useState(false)
+
   // ── 手机控制台 ──
   const [consoleState, setConsoleState] = useState<any>(null)
   const [consoleBusy, setConsoleBusy] = useState(false)
@@ -91,6 +96,16 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           api.power_control_status(),
         ])
         setAllowPower(Boolean(power?.allowed))
+        try {
+          const config = await api.lan_config()
+          setLan({
+            serverUrl: config?.serverUrl ?? '',
+            port: Number(config?.port ?? 38900),
+            proxy: config?.proxy ?? '',
+          })
+        } catch {
+          /* 忽略 */
+        }
         setAutostart(a)
         setOpenwith(o)
         setCloseToTray(c)
@@ -186,6 +201,40 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
       setCloseToTray(ok ? checked : closeToTray)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const saveLan = async () => {
+    setLanBusy(true)
+    setLanMsg('')
+    try {
+      const result = await api.lan_set_config(lan.port, lan.proxy, lan.serverUrl)
+      setLanMsg(result?.message ?? '')
+    } catch (error) {
+      setLanMsg(`保存失败：${error}`)
+    } finally {
+      setLanBusy(false)
+    }
+  }
+
+  const testLan = async () => {
+    setLanBusy(true)
+    setLanMsg('正在扫描局域网内的教师机…')
+    try {
+      const list = await api.lan_scan()
+      const online = (list ?? []).filter((item: any) => item?.online !== false)
+      setLanMsg(
+        online.length
+          ? `在局域网内发现 ${online.length} 台设备：${online
+              .slice(0, 3)
+              .map((item: any) => `${item.name || item.host || ''}`)
+              .join('、')}`
+          : '没有发现教师机服务：请确认教师机已开启「机房管理 → 启动服务」，以及两台机器在同一网段'
+      )
+    } catch (error) {
+      setLanMsg(`测试失败：${error}`)
+    } finally {
+      setLanBusy(false)
     }
   }
 
@@ -475,6 +524,64 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
             {consoleMsg}
           </div>
         )}
+      </div>
+
+      <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
+        远程管理（机房）
+      </div>
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div className="oc-usage-sub" style={{ marginBottom: 10 }}>
+          教师机与学生机之间的连通方式。同一网段留空即可自动发现；跨网段、走内网穿透或
+          经过代理上网的环境，在下面填代理地址（学生机会经由该代理访问教师机）。
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span className="oc-usage-sub" style={{ width: 92 }}>
+              教师机地址
+            </span>
+            <Input
+              value={lan.serverUrl}
+              onChange={(_e, data) => setLan({ ...lan, serverUrl: data.value })}
+              placeholder="http://192.168.1.20:38900（留空＝局域网自动发现）"
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span className="oc-usage-sub" style={{ width: 92 }}>
+              服务端口
+            </span>
+            <Input
+              value={String(lan.port)}
+              onChange={(_e, data) => setLan({ ...lan, port: Number(data.value) || 38900 })}
+              style={{ width: 120 }}
+            />
+            <span className="oc-usage-sub">教师机监听端口（默认 38900，可在机房管理页改）</span>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span className="oc-usage-sub" style={{ width: 92 }}>
+              代理地址
+            </span>
+            <Input
+              value={lan.proxy}
+              onChange={(_e, data) => setLan({ ...lan, proxy: data.value })}
+              placeholder="http://127.0.0.1:7890　或　socks5://user:pass@127.0.0.1:1080（留空＝直连）"
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div className="oc-actions">
+            <Button appearance="primary" size="small" disabled={lanBusy} onClick={() => void saveLan()}>
+              保存
+            </Button>
+            <Button appearance="secondary" size="small" disabled={lanBusy} onClick={() => void testLan()}>
+              测试连通
+            </Button>
+            <span className="oc-usage-sub">{lanMsg}</span>
+          </div>
+          <div className="oc-usage-sub">
+            代理支持带账号密码（形如 socks5://user:pass@主机:端口）。局域网的发现与配对
+            始终直连，不受代理影响，避免"设了代理就连不上教室里的机器"。
+          </div>
+        </div>
       </div>
 
       <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>

@@ -1030,6 +1030,225 @@ class Api:
 
         return clear_received()
 
+    # ══════════════════════════════════════════════════════
+    # 本机定时任务（命令 / 脚本 / 程序）
+    # ══════════════════════════════════════════════════════
+
+    def tasks_state(self) -> dict[str, Any]:
+        """定时任务总览：总开关、任务列表、下次执行、最近记录。"""
+        from .core import tasks
+
+        data = tasks.state()
+        return {
+            "enabled": bool(data.get("enabled")),
+            "items": data.get("items", []),
+            "overview": tasks.runner.next_runs(),
+            "logs": tasks.logs(30),
+            "kinds": tasks.KINDS,
+            "triggers": tasks.TRIGGERS,
+            "weekdays": tasks.WEEKDAYS,
+            "enabledCount": tasks.enabled_count(),
+        }
+
+    def tasks_set_enabled(self, value: bool) -> dict[str, Any]:
+        """定时任务总开关（默认关闭，开启后任务才会真正执行）。"""
+        from .core.tasks import set_enabled
+
+        return set_enabled(value)
+
+    def tasks_add(
+        self,
+        name: str,
+        kind: str,
+        target: str,
+        args: str = "",
+        workdir: str = "",
+        trigger_type: str = "daily",
+        run_time: str = "08:00",
+        weekdays: str = "",
+        once_at: str = "",
+        boot_delay: int = 60,
+    ) -> dict[str, Any]:
+        """新增一个定时任务。"""
+        from .core.tasks import add
+
+        days: list[int] = []
+        for piece in str(weekdays or "").replace("，", ",").split(","):
+            piece = piece.strip()
+            if piece.isdigit():
+                days.append(int(piece))
+        return add(
+            name,
+            kind,
+            target,
+            args,
+            workdir,
+            trigger_type,
+            run_time,
+            days,
+            once_at,
+            boot_delay,
+        )
+
+    def tasks_update(self, item_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+        """修改任务（启用停用 / 改名 / 改时间等）。"""
+        from .core.tasks import update
+
+        return update(item_id, patch)
+
+    def tasks_remove(self, item_id: str) -> dict[str, Any]:
+        from .core.tasks import remove
+
+        return remove(item_id)
+
+    def tasks_run_now(self, item_id: str) -> dict[str, Any]:
+        """立即执行一次（不等调度）。"""
+        from .core.tasks import run_now
+
+        return run_now(item_id)
+
+    def tasks_pick_target(self) -> dict[str, Any]:
+        """弹出文件选择框（选要执行的脚本或程序）。"""
+        if self._window is None:
+            return {"ok": False, "path": "", "message": "窗口未就绪"}
+        try:
+            import webview
+
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=(
+                    "可执行与脚本 (*.exe;*.bat;*.cmd;*.ps1;*.vbs)",
+                    "所有文件 (*.*)",
+                ),
+            )
+        except Exception as exc:
+            return {"ok": False, "path": "", "message": f"打开文件选择框失败：{exc}"}
+        if not result:
+            return {"ok": False, "path": "", "message": "未选择文件"}
+        return {"ok": True, "path": str(result[0]), "message": ""}
+
+    # ══════════════════════════════════════════════════════
+    # 安全扩展：篡改修复 / USB 防护 / 自启动 / 弹窗 / 高占用
+    # ══════════════════════════════════════════════════════
+
+    def guard_overview(self) -> dict[str, Any]:
+        """安全扩展总览（五类检查一次拉齐）。"""
+        from .core.guard import overview
+
+        return overview()
+
+    def guard_scan_hijack(self) -> dict[str, Any]:
+        """扫描浏览器篡改（快捷方式尾巴 / hosts / 主页）。"""
+        from .core.guard import scan_hijack
+
+        return scan_hijack()
+
+    def guard_fix_hosts(self, lines: list[int]) -> dict[str, Any]:
+        """注释掉 hosts 中的可疑行（先备份）。"""
+        from .core.guard import fix_hosts
+
+        return fix_hosts([int(i) for i in (lines or [])])
+
+    def guard_delete_shortcut(self, path: str) -> dict[str, Any]:
+        """删除被加尾巴的快捷方式（先备份）。"""
+        from .core.guard import delete_shortcut
+
+        return delete_shortcut(path)
+
+    def guard_usb_status(self) -> dict[str, Any]:
+        """USB 存储策略状态。"""
+        from .core.guard import usb_status
+
+        return usb_status()
+
+    def guard_set_usb(
+        self, storage_enabled: bool | None = None, read_only: bool | None = None
+    ) -> dict[str, Any]:
+        """切换 USB 存储 / 只读策略（需要管理员）。"""
+        from .core.guard import set_usb_policy
+
+        return set_usb_policy(storage_enabled, read_only)
+
+    def guard_startup(self) -> list[dict[str, Any]]:
+        """开机自启项列表。"""
+        from .core.guard import startup_items
+
+        return startup_items()
+
+    def guard_disable_startup(self, item_id: str) -> dict[str, Any]:
+        """停用自启项（原值备份，可恢复）。"""
+        from .core.guard import disable_startup
+
+        return disable_startup(item_id)
+
+    def guard_enable_startup(self, item_id: str) -> dict[str, Any]:
+        """恢复被停用的自启项。"""
+        from .core.guard import enable_startup
+
+        return enable_startup(item_id)
+
+    def guard_popup_scan(self) -> dict[str, Any]:
+        """扫描按规则命中的推广/弹窗进程。"""
+        from .core.guard import popup_scan
+
+        return popup_scan()
+
+    def guard_popup_kill(self, pid: int) -> dict[str, Any]:
+        """结束命中的弹窗进程。"""
+        from .core.guard import popup_kill
+
+        return popup_kill(pid)
+
+    def guard_high_usage(
+        self, cpu_threshold: float | None = None, mem_mb: int | None = None
+    ) -> dict[str, Any]:
+        """找出异常高占用的进程（只读）。"""
+        from .core.guard import high_usage
+
+        return high_usage(cpu_threshold, mem_mb)
+
+    def guard_kill_high(self, pid: int) -> dict[str, Any]:
+        """结束高占用进程。"""
+        from .core.guard import kill_high_usage
+
+        return kill_high_usage(pid)
+
+    def guard_settings(self) -> dict[str, Any]:
+        """守护开关（弹窗拦截 / 高占用提醒）。"""
+        from .core.guard import guard_settings
+
+        return guard_settings()
+
+    def set_guard_settings(
+        self,
+        popup_guard: bool | None = None,
+        high_usage_guard: bool | None = None,
+        cpu_threshold: float | None = None,
+        mem_threshold_mb: int | None = None,
+    ) -> dict[str, Any]:
+        from .core.guard import set_guard_settings
+
+        return set_guard_settings(popup_guard, high_usage_guard, cpu_threshold, mem_threshold_mb)
+
+    def guard_killed_log(self) -> list[dict[str, Any]]:
+        """守护自动拦截记录。"""
+        from .core.guard import watchdog
+
+        return watchdog.killed()
+
+    def check_url_deep(self, url: str) -> dict[str, Any]:
+        """深度检测一个网址（联网校验页面与域名年龄，较慢）。"""
+        from .core.url_guard import check_url
+
+        return check_url(url, deep=True, use_cache=False)
+
+    def clear_url_cache(self) -> dict[str, Any]:
+        """清空网址检测缓存。"""
+        from .core.url_guard import clear_cache
+
+        return {"ok": True, "cleared": clear_cache()}
+
     def get_close_to_tray(self) -> bool:
         """关闭窗口时是否最小化到托盘（默认开启）。"""
         return bool(config.get("close_to_tray", True))

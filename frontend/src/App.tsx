@@ -15,6 +15,7 @@ import {
   MusicNote1Regular,
   BookRegular,
   ChatRegular,
+  TimerRegular,
   SettingsRegular,
   ShieldRegular,
   ToolboxRegular,
@@ -35,6 +36,7 @@ import HardwarePage from './pages/HardwarePage'
 import LanPage from './pages/LanPage'
 import ClassroomPage from './pages/ClassroomPage'
 import ChatPage from './pages/ChatPage'
+import TasksPage from './pages/TasksPage'
 import ErrorBoundary from './components/ErrorBoundary'
 
 /**
@@ -50,6 +52,7 @@ type PageId =
   | 'lan'
   | 'classroom'
   | 'chat'
+  | 'tasks'
   | 'tools'
   | 'music'
   | 'wallpaper'
@@ -180,6 +183,7 @@ export default function App() {
     { id: 'maintenance', label: '维护', icon: <ToolboxRegular fontSize={16} /> },
     { id: 'classroom', label: '课堂', icon: <BookRegular fontSize={16} /> },
     { id: 'chat', label: '临时传输', icon: <ChatRegular fontSize={16} /> },
+    { id: 'tasks', label: '定时任务', icon: <TimerRegular fontSize={16} /> },
     { id: 'tools', label: '工具箱', icon: <ToolboxRegular fontSize={16} />, badge: tools.length },
     { id: 'music', label: '音乐', icon: <MusicNote1Regular fontSize={16} /> },
     { id: 'wallpaper', label: '壁纸', icon: <SettingsRegular fontSize={16} /> },
@@ -203,6 +207,8 @@ export default function App() {
         return <ClassroomPage />
       case 'chat':
         return <ChatPage />
+      case 'tasks':
+        return <TasksPage />
       case 'dashboard':
         return <DashboardPage />
       case 'hardware':
