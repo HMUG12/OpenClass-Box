@@ -81,7 +81,10 @@ def push_alert(result: dict[str, Any]) -> None:
     只在界面里显示横幅等于没提醒到人。
     """
     try:
-        from ..system.notify import notify
+        try:
+            from ..system.notify import notify
+        except ImportError:  # pragma: no cover - 直接导入场景
+            from system.notify import notify  # type: ignore[no-redef]
 
         level = str(result.get("level") or "")
         url = str(result.get("url") or "")

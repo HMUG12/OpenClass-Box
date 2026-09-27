@@ -54,9 +54,14 @@ def notify(title: str, message: str, key: str = "", interval: float = MIN_INTERV
         except Exception:
             pass
 
-    # 兜底：至少写进运行日志，用户反馈问题时能看到曾触发过的告警
+    # 兜底：至少写进运行日志，用户反馈问题时能看到曾触发过的告警。
+    # 双路导入：包内运行用相对导入；被直接 import（脚本/测试）时回退绝对导入，
+    # 否则异常会被静默吞掉，告警就真的"消失"了。
     try:
-        from ..core.applog import log
+        try:
+            from ..core.applog import log
+        except ImportError:  # pragma: no cover - 直接导入场景
+            from core.applog import log  # type: ignore[no-redef]
 
         log(f"通知（未弹出，仅记录）：{title} — {message}", "WARN")
     except Exception:
