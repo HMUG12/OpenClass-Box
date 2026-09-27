@@ -60,3 +60,6 @@ runtime/
 tools/mpv/
 signing/
 frontend/vite.config.ts.timestamp-*
+
+# 本地发布产物（安装包体积大，不随仓库分发）
+release/
