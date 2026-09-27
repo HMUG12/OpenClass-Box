@@ -123,6 +123,8 @@ def _snapshot() -> dict[str, Any]:
         "memory": metrics.get("memory") or {},
         "network": metrics.get("network") or {},
         "disk": metrics.get("disk") or {},
+        # 历史曲线数据（手机端画趋势图；只有最近的采样点，不含任何隐私内容）
+        "history": metrics.get("history") or [],
         "gpus": quick.get("gpus") or [],
         "repairs": list_repairs(),
         "security": security_stats(),
@@ -192,6 +194,18 @@ button:disabled{opacity:.55}
 #login{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;
 justify-content:center;padding:26px;z-index:9}
 #login.on{display:flex}
+/* 跟随系统浅色：教室靠窗光线强时不少老师会用浅色主题 */
+@media (prefers-color-scheme: light){
+  :root{--bg:#f5f6f8;--card:#ffffff;--line:#e3e6ea;--fg:#1f2329;--dim:#6b7280}
+  body{background:#f5f6f8}
+  .ring::after{background:var(--card)}
+}
+.tabs{display:flex;gap:6px;margin-top:10px}
+.tabs button{margin-top:0;padding:8px 10px;font-size:13px;background:transparent;border:1px solid var(--line);color:var(--dim)}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+svg.chart{width:100%;height:120px;display:block;margin-top:8px}
+svg.chart polyline{fill:none;stroke-width:2;stroke-linejoin:round}
+svg.chart line{stroke:rgba(128,128,128,.25);stroke-width:1}
 #login input{font:650 26px/1 ui-monospace,monospace;letter-spacing:.5em;text-align:center;
 padding:16px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--fg);width:100%}
 .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;
@@ -225,6 +239,17 @@ background:rgba(63,185,80,.15);color:var(--ok)}
   <b style="font-size:14px">远程修复</b>
   <div class="hint">修复动作需要在这台机器上确认权限（部分会弹系统框）</div>
   <div id="repairs"></div>
+</div>
+
+<div class="card">
+  <b style="font-size:14px">趋势（最近 3 分钟）</b>
+  <div class="tabs" id="chartTabs">
+    <button data-key="cpu" class="on">CPU</button>
+    <button data-key="memory">内存</button>
+    <button data-key="net">网速</button>
+  </div>
+  <svg class="chart" id="chart" viewBox="0 0 300 120" preserveAspectRatio="none"></svg>
+  <div class="hint" id="chartHint">每 5 秒刷新一次数据</div>
 </div>
 
 <div class="card">
@@ -288,6 +313,7 @@ async function load(){
     $('v-ul').textContent=fmtRate(d.network.upload);
     $('security').textContent='累计检测 '+d.security.total+' 条 · 今日 '+d.security.today+
       ' 条 · 风险 '+d.security.riskTotal+' 条 · 白名单 '+d.security.whitelistCount+' 个';
+    drawChart(d.history || []);
     if(!$('repairs').dataset.done){
       var html='';
       (d.repairs||[]).forEach(function(it){
@@ -328,6 +354,41 @@ async function health(){
   }catch(e){ $('health').innerHTML='<div class="hint">体检失败：'+e+'</div>' }
   btn.disabled=false; btn.textContent='重新体检';
 }
+var historyData=[];
+var chartKey='cpu';
+function drawChart(history){
+  if(history&&history.length) historyData=history;
+  var svg=$('chart');
+  if(!svg) return;
+  var points=historyData.slice(-36);   // 最近约 3 分钟
+  if(points.length<2){ svg.innerHTML=''; return }
+  var values=points.map(function(p){
+    if(chartKey==='cpu') return Number(p.cpu||0);
+    if(chartKey==='memory') return Number(p.memory||0);
+    return Number(p.download||0)/1024;   // KB/s
+  });
+  var max=Math.max.apply(null,values);
+  if(chartKey==='net'){ max=Math.max(max,100) } else { max=Math.max(max,20) }
+  var w=300,h=120,step=w/Math.max(1,(values.length-1));
+  var pts=values.map(function(v,i){
+    var x=i*step, y=h-(Math.min(v,max)/max)*(h-12)-6;
+    return x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+  var color=chartKey==='cpu'?'#4c8dff':(chartKey==='memory'?'#3fb950':'#d29922');
+  svg.innerHTML='<line x1="0" y1="'+(h-6)+'" x2="'+w+'" y2="'+(h-6)+'"></line>'+
+    '<polyline points="'+pts+'" stroke="'+color+'"></polyline>';
+  var last=values[values.length-1];
+  $('chartHint').textContent=(chartKey==='net'?'当前 '+last.toFixed(0)+' KB/s':'当前 '+last.toFixed(0)+'%')+
+    ' · 峰值 '+(chartKey==='net'?max.toFixed(0)+' KB/s':max.toFixed(0)+'%');
+}
+Array.prototype.forEach.call(document.querySelectorAll('#chartTabs button'),function(btn){
+  btn.onclick=function(){
+    chartKey=btn.dataset.key;
+    Array.prototype.forEach.call(document.querySelectorAll('#chartTabs button'),function(b){ b.classList.remove('on') });
+    btn.classList.add('on');
+    drawChart(historyData);
+  };
+});
 $('btn-auth').onclick=auth;
 $('code').addEventListener('keydown',function(e){ if(e.key==='Enter') auth() });
 $('btn-health').onclick=health;
