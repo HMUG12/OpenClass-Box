@@ -59,3 +59,4 @@ third_party/
 runtime/
 tools/mpv/
 signing/
+frontend/vite.config.ts.timestamp-*
