@@ -90,6 +90,12 @@ export interface OcApi {
   export_profile(note?: string): Promise<any>
   import_profile(path: string): Promise<any>
   pick_profile_file(): Promise<any>
+  market_list(refresh?: boolean): Promise<any>
+  market_install(pluginId: string): Promise<any>
+  market_import_local(): Promise<any>
+  market_uninstall(pluginId: string): Promise<any>
+  market_index_url(): Promise<any>
+  market_set_index_url(url: string): Promise<any>
   search_music(keyword?: string): Promise<any[]>
   music_url(path: string): Promise<string>
   search_music_online(keyword: string, platform?: string): Promise<any[]>
@@ -270,6 +276,14 @@ const MOCK_API: OcApi = {
   async export_profile() { return { ok: false, message: '开发预览模式' } },
   async import_profile() { return { ok: false, message: '开发预览模式' } },
   async pick_profile_file() { return { ok: false, path: '', message: '开发预览模式' } },
+  async market_list() {
+    return { ok: false, source: 'none', message: '开发预览模式', indexVersion: '', indexUrl: '', items: [], installedCount: 0 }
+  },
+  async market_install() { return { ok: false, message: '开发预览模式：无法安装插件' } },
+  async market_import_local() { return { ok: false, message: '开发预览模式：无法导入插件' } },
+  async market_uninstall() { return { ok: false, message: '开发预览模式' } },
+  async market_index_url() { return { url: '', default: '' } },
+  async market_set_index_url() { return { ok: false, message: '开发预览模式' } },
   async search_music() { return [] },
   async music_url(path) { return path },
   async search_music_online() { return [] },

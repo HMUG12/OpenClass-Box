@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>随机点名</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--line:#262b35;--fg:#e8eaed;--dim:#98a0ad;--accent:#4c8dff;--ok:#3fb950}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;padding:26px 20px 40px;background:radial-gradient(1200px 700px at 50% -10%,#1b2130,#0f1115 60%);
+    color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI",system-ui,"Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;gap:20px}
+  h1{margin:0;font-size:17px;font-weight:650;color:var(--dim)}
+  .name{font:700 clamp(56px,14vw,180px)/1.1 -apple-system,"Segoe UI",system-ui,sans-serif;letter-spacing:4px;
+    min-height:1.2em;display:flex;align-items:center;justify-content:center;text-align:center}
+  .name.rolling{color:var(--accent);opacity:.85}
+  .name.picked{color:var(--ok);animation:pop .35s ease}
+  @keyframes pop{0%{transform:scale(.86)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
+  .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  button{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:12px;
+    padding:12px 20px;font-size:16px;font-weight:600;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.main{background:var(--accent);border-color:var(--accent);color:#fff;min-width:170px}
+  button.ghost{background:transparent}
+  .panel{width:min(860px,94vw);border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--card)}
+  textarea{width:100%;min-height:130px;border-radius:10px;border:1px solid var(--line);background:#12151c;
+    color:var(--fg);padding:12px;font:14px/1.6 ui-monospace,Menlo,monospace;resize:vertical}
+  label{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:13.5px;margin-top:10px}
+  .count{color:var(--dim);font-size:13.5px}
+  .history{color:var(--dim);font-size:13.5px;line-height:1.9;word-break:break-all}
+  .history b{color:var(--fg);font-weight:600}
+</style>
+</head>
+<body>
+  <h1>随机点名</h1>
+  <div class="name" id="name">准备就绪</div>
+  <div class="row">
+    <button class="main" id="draw">开始点名</button>
+    <button id="reset">清空记录</button>
+    <button class="ghost" id="full">全屏</button>
+  </div>
+  <div class="count" id="count"></div>
+
+  <div class="panel">
+    <div style="font-weight:600;margin-bottom:8px">学生名单（每行一个名字，也可以粘贴「学号 姓名」）</div>
+    <textarea id="list" placeholder="张三&#10;李四&#10;王五"></textarea>
+    <label><input type="checkbox" id="noRepeat" checked> 不重复抽取（抽完自动提示）</label>
+    <div class="history" id="history"></div>
+  </div>
+
+  <div class="count">空格 = 开始点名 / 停止 · R = 清空记录 · F = 全屏</div>
+
+<script>
+(function(){
+  var nameEl = document.getElementById('name');
+  var listEl = document.getElementById('list');
+  var noRepeatEl = document.getElementById('noRepeat');
+  var historyEl = document.getElementById('history');
+  var countEl = document.getElementById('count');
+  var drawBtn = document.getElementById('draw');
+
+  var names = [];
+  var picked = [];
+  var rolling = false;
+  var timer = null;
+
+  function parseNames(){
+    return listEl.value.split(/\r?\n/)
+      .map(function(line){
+        line = line.trim();
+        if(!line) return '';
+        // 「学号 姓名」形式：只保留姓名部分，方便老师直接粘贴花名册
+        var parts = line.split(/\s+/);
+        return parts.length > 1 ? parts[parts.length - 1] : line;
+      })
+      .filter(Boolean);
+  }
+
+  function refresh(){
+    names = parseNames();
+    var remain = names.length - picked.length;
+    countEl.textContent = names.length
+      ? '共 ' + names.length + ' 人' + (noRepeatEl.checked ? '，剩余 ' + Math.max(0, remain) + ' 人未抽' : '')
+      : '还没有名单：先把学生名单粘贴到下面';
+    historyEl.innerHTML = picked.length
+      ? '<b>已抽到：</b>' + picked.map(function(n, i){ return (i + 1) + '.' + n }).join('　')
+      : '';
+  }
+
+  function candidates(){
+    if(!noRepeatEl.checked) return names;
+    return names.filter(function(n){ return picked.indexOf(n) === -1 });
+  }
+
+  function start(){
+    if(rolling) return;
+    if(!names.length){ refresh(); alert('请先粘贴学生名单'); return; }
+    var pool = candidates();
+    if(!pool.length){ alert('所有同学都抽过了，可以点「清空记录」重新开始'); return; }
+
+    rolling = true;
+    drawBtn.textContent = '停止';
+    nameEl.classList.remove('picked');
+    nameEl.classList.add('rolling');
+    try{ document.title = '抽取中… · 随机点名' }catch(e){}
+
+    timer = setInterval(function(){
+      nameEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+    }, 60);
+  }
+
+  function stop(){
+    if(!rolling) return;
+    rolling = false;
+    clearInterval(timer); timer = null;
+    drawBtn.textContent = '开始点名';
+
+    var pool = candidates();
+    var chosen = pool[Math.floor(Math.random() * pool.length)];
+    nameEl.textContent = chosen;
+    nameEl.classList.remove('rolling');
+    nameEl.classList.add('picked');
+    if(picked.indexOf(chosen) === -1) picked.push(chosen);
+    try{ document.title = chosen + ' · 随机点名' }catch(e){}
+    refresh();
+  }
+
+  drawBtn.onclick = function(){ rolling ? stop() : start() };
+  document.getElementById('reset').onclick = function(){
+    picked = []; nameEl.textContent = '准备就绪'; nameEl.classList.remove('picked');
+    try{ document.title = '随机点名' }catch(e){}
+    refresh();
+  };
+  document.getElementById('full').onclick = function(){
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+  };
+  listEl.addEventListener('input', refresh);
+  noRepeatEl.addEventListener('change', refresh);
+
+  document.addEventListener('keydown', function(e){
+    if(e.code === 'Space' && e.target !== listEl){ e.preventDefault(); rolling ? stop() : start(); }
+    else if((e.key === 'r' || e.key === 'R') && e.target !== listEl){ document.getElementById('reset').click(); }
+    else if((e.key === 'f' || e.key === 'F') && e.target !== listEl){ document.getElementById('full').click(); }
+  });
+
+  // 首次使用给一份示例名单，老师直接改就行
+  listEl.value = '张三\n李四\n王五\n赵六';
+  refresh();
+})();
+</script>
+</body>
+</html>

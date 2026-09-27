@@ -17,6 +17,8 @@ const CATEGORY_NAMES: Record<string, string> = {
   other: '其他',
 }
 
+import MarketPanel from '../components/MarketPanel'
+
 // 来源（kind）：原先独立的「插件」页合并到这里
 const KIND_NAMES: Record<string, string> = {
   all: '全部来源',
@@ -144,6 +146,8 @@ export default function ToolsPage({ tools, category, setCategory, onLaunch, onRe
           ))}
         </div>
       )}
+
+      <MarketPanel onChanged={onRefresh} />
     </div>
   )
 }

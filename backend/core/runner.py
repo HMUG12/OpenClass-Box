@@ -20,7 +20,10 @@ if os.name == "nt":
         | subprocess.CREATE_NO_WINDOW
     )
 
-_EXECUTABLE_SUFFIXES = {".exe", ".com", ".bat", ".cmd", ".ps1"}
+_EXECUTABLE_SUFFIXES = {".exe", ".com", ".bat", ".cmd", ".ps1", ".html", ".htm"}
+
+# 网页类工具（插件最常见的形态）：交给系统默认浏览器打开
+_HTML_SUFFIXES = {".html", ".htm"}
 
 
 def resolve_command(entry: Path, args: list[str]) -> tuple[list[str], Path]:
@@ -61,6 +64,11 @@ def launch_detached(entry: Path, args: list[str], admin: bool = False) -> tuple[
     """启动一个工具进程。返回 (成功, 说明)。"""
     if not entry.exists():
         return False, f"入口文件不存在：{entry}"
+
+    # 网页类工具：用默认浏览器打开（不需要提权，也不占用子进程）
+    if entry.suffix.lower() in _HTML_SUFFIXES:
+        ok, message = open_in_explorer(entry)
+        return (True, "已在浏览器中打开") if ok else (False, message)
 
     cmd, workdir = resolve_command(entry, args)
 

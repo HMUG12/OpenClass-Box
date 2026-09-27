@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课堂计时器</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --line:#262b35; --fg:#e8eaed; --dim:#98a0ad;
+    --accent:#4c8dff; --ok:#3fb950; --bad:#f85149;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;background:radial-gradient(1200px 800px at 50% -10%,#1b2130,#0f1115 60%);
+    color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI",system-ui,"Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:24px;
+  }
+  h1{margin:0;font-size:17px;font-weight:650;letter-spacing:.5px;color:var(--dim)}
+  .clock{
+    font:700 clamp(72px,18vw,220px)/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-variant-numeric:tabular-nums;letter-spacing:2px;
+    text-shadow:0 0 60px rgba(76,141,255,.25);
+  }
+  .clock.done{color:var(--bad);animation:blink 1s steps(2,start) infinite}
+  .clock.running{color:var(--ok)}
+  @keyframes blink{50%{opacity:.25}}
+  .presets{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:820px}
+  button{
+    border:1px solid var(--line);background:var(--card);color:var(--fg);
+    border-radius:12px;padding:12px 20px;font-size:16px;font-weight:600;cursor:pointer;
+    transition:border-color .15s ease,background .15s ease,transform .06s ease;
+  }
+  button:hover{border-color:var(--accent)}
+  button:active{transform:scale(.97)}
+  button.on{border-color:var(--accent);color:var(--accent)}
+  button.main{background:var(--accent);border-color:var(--accent);color:#fff;min-width:150px}
+  button.ghost{background:transparent}
+  .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .hint{color:var(--dim);font-size:13px;text-align:center;max-width:640px}
+  input[type=number]{
+    width:92px;padding:12px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card);color:var(--fg);font-size:16px;text-align:center;
+  }
+  .progress{width:min(880px,92vw);height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+  .progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .3s linear}
+</style>
+</head>
+<body>
+  <h1>课堂计时器</h1>
+  <div class="clock" id="clock">05:00</div>
+  <div class="progress"><i id="bar"></i></div>
+
+  <div class="presets" id="presets">
+    <button data-min="1">1 分钟</button>
+    <button data-min="3">3 分钟</button>
+    <button data-min="5" class="on">5 分钟</button>
+    <button data-min="10">10 分钟</button>
+    <button data-min="15">15 分钟</button>
+    <button data-min="20">20 分钟</button>
+    <button data-min="45">一节课</button>
+  </div>
+
+  <div class="row">
+    <input type="number" id="custom" min="1" max="180" placeholder="自定义">
+    <button class="ghost" id="setCustom">设为该时长（分）</button>
+    <button class="ghost" id="addMin">+1 分钟</button>
+  </div>
+
+  <div class="row">
+    <button class="main" id="toggle">开始</button>
+    <button id="reset">重置</button>
+    <button id="countup">改为正计时</button>
+    <button class="ghost" id="full">全屏</button>
+  </div>
+
+  <div class="hint">
+    倒计时结束时会有蜂鸣提示并闪烁。快捷键：空格 = 开始 / 暂停，R = 重置，F = 全屏。
+    上课时点「全屏」投到大屏效果最好。
+  </div>
+
+<script>
+(function(){
+  var clock = document.getElementById('clock');
+  var bar = document.getElementById('bar');
+  var toggleBtn = document.getElementById('toggle');
+  var countupBtn = document.getElementById('countup');
+
+  var total = 300;        // 设定秒数
+  var remain = 300;       // 剩余（倒计时）/ 已用（正计时）
+  var running = false;
+  var countUp = false;
+  var timer = null;
+  var finished = false;
+
+  function fmt(s){
+    s = Math.max(0, Math.round(s));
+    var m = Math.floor(s / 60), sec = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function paint(){
+    var value = countUp ? remain : remain;
+    clock.textContent = fmt(value);
+    clock.classList.toggle('running', running && !finished);
+    clock.classList.toggle('done', finished);
+    var percent = countUp
+      ? (total > 0 ? Math.min(100, remain / total * 100) : 0)
+      : (total > 0 ? Math.max(0, Math.min(100, (total - remain) / total * 100)) : 0);
+    bar.style.width = percent + '%';
+  }
+
+  function beep(){
+    try{
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      var ctx = new Ctx();
+      [0, 0.35, 0.7].forEach(function(offset){
+        var osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.frequency.value = 880;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
+        gain.gain.exponentialRampToValueAtTime(0.35, ctx.currentTime + offset + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.28);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + offset); osc.stop(ctx.currentTime + offset + 0.3);
+      });
+      setTimeout(function(){ try{ ctx.close() }catch(e){} }, 1500);
+    }catch(e){}
+  }
+
+  function tick(){
+    if(countUp){ remain += 1; }
+    else{
+      remain -= 1;
+      if(remain <= 0){ remain = 0; finish(); }
+    }
+    paint();
+  }
+
+  function finish(){
+    stop();
+    finished = true;
+    beep();
+    try{ document.title = '时间到 · 课堂计时器'; }catch(e){}
+  }
+
+  function start(){
+    if(running) return;
+    if(!countUp && remain <= 0) remain = total;
+    if(countUp && remain >= 3600) return;
+    finished = false;
+    running = true;
+    toggleBtn.textContent = '暂停';
+    timer = setInterval(tick, 1000);
+    paint();
+  }
+
+  function stop(){
+    running = false;
+    toggleBtn.textContent = '开始';
+    if(timer){ clearInterval(timer); timer = null; }
+    paint();
+  }
+
+  function reset(){
+    stop();
+    finished = false;
+    remain = countUp ? 0 : total;
+    try{ document.title = '课堂计时器'; }catch(e){}
+    paint();
+  }
+
+  document.getElementById('presets').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-min]');
+    if(!btn) return;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+    total = parseInt(btn.dataset.min, 10) * 60;
+    countUp = false;
+    countupBtn.textContent = '改为正计时';
+    reset();
+  });
+
+  document.getElementById('setCustom').onclick = function(){
+    var minutes = parseInt(document.getElementById('custom').value, 10);
+    if(!minutes || minutes < 1 || minutes > 180){ alert('请输入 1~180 之间的分钟数'); return; }
+    total = minutes * 60;
+    Array.prototype.forEach.call(document.querySelectorAll('#presets button'), function(b){ b.classList.remove('on'); });
+    countUp = false;
+    countupBtn.textContent = '改为正计时';
+    reset();
+  };
+
+  document.getElementById('addMin').onclick = function(){
+    if(countUp) return;
+    total += 60;
+    remain += 60;
+    paint();
+  };
+
+  toggleBtn.onclick = function(){ running ? stop() : start(); };
+  document.getElementById('reset').onclick = reset;
+  countupBtn.onclick = function(){
+    countUp = !countUp;
+    countupBtn.textContent = countUp ? '改为倒计时' : '改为正计时';
+    reset();
+  };
+  document.getElementById('full').onclick = function(){
+    var el = document.documentElement;
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else if(el.requestFullscreen){ el.requestFullscreen(); }
+  };
+
+  document.addEventListener('keydown', function(e){
+    if(e.code === 'Space'){ e.preventDefault(); running ? stop() : start(); }
+    else if(e.key === 'r' || e.key === 'R'){ reset(); }
+    else if(e.key === 'f' || e.key === 'F'){ document.getElementById('full').click(); }
+  });
+
+  reset();
+})();
+</script>
+</body>
+</html>

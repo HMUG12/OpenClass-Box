@@ -575,6 +575,56 @@ class Api:
 
         return import_profile(path)
 
+    def market_list(self, refresh: bool = False) -> dict[str, Any]:
+        """插件市场列表（JSON 索引 + 本机安装状态）。"""
+        from .core.market import list_plugins
+
+        return list_plugins(refresh)
+
+    def market_install(self, plugin_id: str) -> dict[str, Any]:
+        """下载并安装插件（https + sha256 校验后解压到 tools/）。"""
+        from .core.market import install
+
+        return install(plugin_id)
+
+    def market_import_local(self) -> dict[str, Any]:
+        """选择本地 zip 离线导入插件。"""
+        if self._window is None:
+            return {"ok": False, "message": "窗口未就绪"}
+        try:
+            import webview
+
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=("插件包 (*.zip)", "所有文件 (*.*)"),
+            )
+        except Exception as exc:
+            return {"ok": False, "message": f"打开文件选择框失败：{exc}"}
+        if not result:
+            return {"ok": False, "message": "未选择文件"}
+        from .core.market import import_local
+
+        return import_local(str(result[0]))
+
+    def market_uninstall(self, plugin_id: str) -> dict[str, Any]:
+        """卸载插件（仅限 tools/ 下带 tool.json 的目录）。"""
+        from .core.market import uninstall
+
+        return uninstall(plugin_id)
+
+    def market_index_url(self) -> dict[str, Any]:
+        """插件索引地址（可改成自建镜像）。"""
+        from .core.market import DEFAULT_INDEX_URL, index_url
+
+        return {"url": index_url(), "default": DEFAULT_INDEX_URL}
+
+    def market_set_index_url(self, url: str) -> dict[str, Any]:
+        """修改插件索引地址。"""
+        from .core.market import set_index_url
+
+        return set_index_url(url)
+
     def pick_profile_file(self) -> dict[str, Any]:
         """弹出文件选择框选择 .ocbprofile。"""
         if self._window is None:

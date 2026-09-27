@@ -1,0 +1,12 @@
+{
+  "id": "classroom-timer",
+  "name": "课堂计时器",
+  "description": "倒计时 / 正计时，适合课堂练习、随堂测与考试计时；纯网页实现，离线可用，可全屏投到大屏",
+  "category": "classroom",
+  "icon": "Timer",
+  "version": "1.0.0",
+  "author": "HMUG12",
+  "kind": "web",
+  "entry": "index.html",
+  "tags": ["课堂", "计时", "考试"]
+}

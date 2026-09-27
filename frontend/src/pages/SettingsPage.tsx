@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Switch, Spinner } from '@fluentui/react-components'
+import { Button, Input, Switch, Spinner } from '@fluentui/react-components'
 import { DesktopRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
 import { api } from '../api'
 import type { ThemeMode } from '../types'
@@ -197,6 +197,31 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
     }
   }
 
+  // ── 插件索引地址 ──
+  const [marketUrl, setMarketUrl] = useState('')
+  const [marketDefault, setMarketDefault] = useState('')
+  const [marketMsg, setMarketMsg] = useState('')
+
+  const loadMarket = async () => {
+    try {
+      const data = await api.market_index_url()
+      setMarketUrl(data?.url ?? '')
+      setMarketDefault(data?.default ?? '')
+    } catch {
+      /* 开发模式忽略 */
+    }
+  }
+
+  useEffect(() => {
+    void loadMarket()
+  }, [])
+
+  const saveMarket = async () => {
+    const result = await api.market_set_index_url(marketUrl)
+    setMarketMsg(result?.message ?? '')
+    await loadMarket()
+  }
+
   const componentUpdates = components.filter((item) => item.hasUpdate)
 
   return (
@@ -332,6 +357,40 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         {consoleMsg && (
           <div className="oc-usage-sub" style={{ marginTop: 8 }}>
             {consoleMsg}
+          </div>
+        )}
+      </div>
+
+      <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
+        插件索引
+      </div>
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+          工具箱 → 插件市场从这里读取索引。教室没有外网时，可以换成内网镜像地址，
+          或用「离线导入 zip」手动安装插件包。
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Input
+            value={marketUrl}
+            onChange={(_e, data) => setMarketUrl(data.value)}
+            style={{ flex: 1, minWidth: 320 }}
+          />
+          <Button appearance="primary" size="small" onClick={() => void saveMarket()}>
+            保存
+          </Button>
+          {marketDefault && marketUrl !== marketDefault && (
+            <Button
+              appearance="secondary"
+              size="small"
+              onClick={() => setMarketUrl(marketDefault)}
+            >
+              恢复默认
+            </Button>
+          )}
+        </div>
+        {marketMsg && (
+          <div className="oc-usage-sub" style={{ marginTop: 8 }}>
+            {marketMsg}
           </div>
         )}
       </div>

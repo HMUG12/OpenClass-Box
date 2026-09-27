@@ -1,0 +1,12 @@
+{
+  "id": "random-picker",
+  "name": "随机点名",
+  "description": "课堂上随机抽取学生回答问题，支持自定义名单、不重复抽取与抽取记录；纯网页实现，离线可用",
+  "category": "classroom",
+  "icon": "People",
+  "version": "1.0.0",
+  "author": "HMUG12",
+  "kind": "web",
+  "entry": "index.html",
+  "tags": ["课堂", "点名", "互动"]
+}

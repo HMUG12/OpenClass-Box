@@ -1,0 +1,35 @@
+{
+  "version": "2026.09",
+  "updatedAt": "2026-09-27",
+  "note": "OpenClass-Box 社区插件索引。上架方式：把带 tool.json 的文件夹打成 zip 放到 plugins/packages/，在这里加一条记录（含 sha256），提 PR 即可。",
+  "plugins": [
+    {
+      "id": "classroom-timer",
+      "name": "课堂计时器",
+      "desc": "倒计时 / 正计时，适合课堂练习、随堂测与考试计时；纯网页实现，离线可用，可全屏投到大屏",
+      "author": "HMUG12",
+      "roles": ["老师", "电教"],
+      "version": "1.0.0",
+      "category": "classroom",
+      "size": 3625,
+      "sha256": "e62d116be62794939f26bfa0ce71b95c933bc75e5be54070187601b16a6594d8",
+      "url": "https://raw.githubusercontent.com/HMUG12/OpenClass-Box/main/plugins/packages/classroom-timer-1.0.0.zip",
+      "homepage": "https://github.com/HMUG12/OpenClass-Box/tree/main/plugins/classroom-timer",
+      "tags": ["课堂", "计时", "考试"]
+    },
+    {
+      "id": "random-picker",
+      "name": "随机点名",
+      "desc": "课堂上随机抽取学生回答问题，支持自定义名单、不重复抽取与抽取记录；纯网页实现，离线可用",
+      "author": "HMUG12",
+      "roles": ["老师", "电教"],
+      "version": "1.0.0",
+      "category": "classroom",
+      "size": 3202,
+      "sha256": "9220567df59f5b57b1ac4e268c2948c98abb0b48352b30bb48d21c733ad5cd31",
+      "url": "https://raw.githubusercontent.com/HMUG12/OpenClass-Box/main/plugins/packages/random-picker-1.0.0.zip",
+      "homepage": "https://github.com/HMUG12/OpenClass-Box/tree/main/plugins/random-picker",
+      "tags": ["课堂", "点名", "互动"]
+    }
+  ]
+}
