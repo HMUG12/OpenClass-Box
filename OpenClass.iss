@@ -62,10 +62,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 #if RoleNum == "1"
 ; A 端：程序本体 + WebView2Runtime（黑屏防线）；排除管理端用不到的重型工具
-Source: "dist_build/OpenClass-Box/*"; DestDir: "{app}"; Excludes: "tools\openoffice\*,tools\mpv\*,tools\vlc\*,tools\libreoffice\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist_build/OpenClass-Box/*"; DestDir: "{app}"; Excludes: "data\*,tools\openoffice\*,tools\mpv\*,tools\vlc\*,tools\libreoffice\*,tools\*.bak\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 #else
 ; B 端：完整工具箱
-Source: "dist_build/OpenClass-Box/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 排除 data\*：那是打包机上跑过 exe 生成的运行时数据（配置 / 日志 / 局域网库），
+; 不能带给用户，否则新装机器拿到的是打包者的设置
+Source: "dist_build/OpenClass-Box/*"; DestDir: "{app}"; Excludes: "data\*,tools\*.bak\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 #endif
 ; WebView2 运行时安装器：随包携带，万一内嵌运行时不可用还能在线补装
 Source: "installer\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall

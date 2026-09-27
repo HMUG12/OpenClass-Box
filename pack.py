@@ -136,6 +136,18 @@ def main() -> int:
     else:
         print("[pack] 未找到 runtime/WebView2Runtime，跳过（将依赖系统 WebView2）")
 
+    # 运行时数据目录（配置 / 日志 / 局域网库）：开发机在产物目录跑过 exe 就会生成，
+    # 它是「打包者的设置」，绝不能进安装包；插件升级留下的 *.bak 同理
+    stray_data = DIST / "OpenClass-Box" / "data"
+    if stray_data.exists():
+        shutil.rmtree(stray_data, ignore_errors=True)
+        print("[pack] 已清理产物中的运行时数据目录 data/")
+    stray_bak = list((DIST / "OpenClass-Box" / "tools").glob("*.bak"))
+    for item in stray_bak:
+        shutil.rmtree(item, ignore_errors=True)
+    if stray_bak:
+        print(f"[pack] 已清理 {len(stray_bak)} 个插件备份目录")
+
     exe = DIST / "OpenClass-Box" / "OpenClass-Box.exe"
 
     # 打包完成后自动签名（证书已生成时），并把信任证书放进产物目录：
