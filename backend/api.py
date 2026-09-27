@@ -936,6 +936,100 @@ class Api:
 
         return allow_firewall()
 
+    def power_control_status(self) -> dict[str, Any]:
+        """远程电源控制状态：开关 + 支持的动作 + 延迟范围（不执行任何操作）。"""
+        from .core.power import (
+            DEFAULT_DELAY,
+            MAX_DELAY,
+            MIN_DELAY,
+            allowed,
+            supported_actions,
+        )
+
+        return {
+            "allowed": allowed(),
+            "actions": supported_actions(),
+            "minDelay": MIN_DELAY,
+            "maxDelay": MAX_DELAY,
+            "defaultDelay": DEFAULT_DELAY,
+        }
+
+    def set_allow_power(self, value: bool) -> dict[str, Any]:
+        """开启/关闭「允许远程电源控制」（默认关闭）。"""
+        from .core.power import set_allowed
+
+        return set_allowed(value)
+
+    # ══════════════════════════════════════════════════════
+    # 临时聊天传输（局域网平等会话，用完即走）
+    # ══════════════════════════════════════════════════════
+
+    def chat_state(self) -> dict[str, Any]:
+        """临时会话状态（房间 / 成员 / 消息 / 收到文件的目录）。"""
+        from .core.chat import state
+
+        return state()
+
+    def chat_host(
+        self, nickname: str = "我", room_name: str = "", password: str = ""
+    ) -> dict[str, Any]:
+        """开一个临时房间（本机当主机）。"""
+        from .core.chat import host_room
+
+        return host_room(nickname, room_name, password)
+
+    def chat_join(
+        self, host: str, code: str, nickname: str = "同事", password: str = ""
+    ) -> dict[str, Any]:
+        """加入别人的临时房间。"""
+        from .core.chat import join_room
+
+        return join_room(host, code, nickname, password)
+
+    def chat_send_text(self, text: str) -> dict[str, Any]:
+        """发送一条文字消息。"""
+        from .core.chat import send_text
+
+        return send_text(text)
+
+    def chat_send_file(self, path: str) -> dict[str, Any]:
+        """发送一个文件。"""
+        from .core.chat import send_file
+
+        return send_file(path)
+
+    def chat_pick_file(self) -> dict[str, Any]:
+        """弹出文件选择框（选要发送的文件）。"""
+        if self._window is None:
+            return {"ok": False, "path": "", "message": "窗口未就绪"}
+        try:
+            import webview
+
+            result = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False)
+        except Exception as exc:
+            return {"ok": False, "path": "", "message": f"打开文件选择框失败：{exc}"}
+        if not result:
+            return {"ok": False, "path": "", "message": "未选择文件"}
+        return {"ok": True, "path": str(result[0]), "message": ""}
+
+    def chat_save_file(self, file_id: str, name: str) -> dict[str, Any]:
+        """把别人发的文件下载到本机。"""
+        from .core.chat import save_file
+
+        return save_file(file_id, name)
+
+    def chat_leave(self, clear_files: bool = False) -> dict[str, Any]:
+        """退出房间（可选择清空临时文件）。"""
+        from .core.chat import leave
+
+        return leave(clear_files)
+
+    def chat_clear_received(self) -> dict[str, Any]:
+        """清空临时聊天产生的文件。"""
+        from .core.chat import clear_received
+
+        return clear_received()
+
     def get_close_to_tray(self) -> bool:
         """关闭窗口时是否最小化到托盘（默认开启）。"""
         return bool(config.get("close_to_tray", True))

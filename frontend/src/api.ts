@@ -105,6 +105,17 @@ export interface OcApi {
   set_startup_mode(mode: string): Promise<any>
   webconsole_firewall(): Promise<any>
   webconsole_allow_firewall(): Promise<any>
+  power_control_status(): Promise<any>
+  set_allow_power(value: boolean): Promise<any>
+  chat_state(): Promise<any>
+  chat_host(nickname?: string, roomName?: string, password?: string): Promise<any>
+  chat_join(host: string, code: string, nickname?: string, password?: string): Promise<any>
+  chat_send_text(text: string): Promise<any>
+  chat_send_file(path: string): Promise<any>
+  chat_pick_file(): Promise<any>
+  chat_save_file(fileId: string, name: string): Promise<any>
+  chat_leave(clearFiles?: boolean): Promise<any>
+  chat_clear_received(): Promise<any>
   search_music(keyword?: string): Promise<any[]>
   music_url(path: string): Promise<string>
   search_music_online(keyword: string, platform?: string): Promise<any[]>
@@ -304,6 +315,35 @@ const MOCK_API: OcApi = {
   async set_startup_mode() { return { ok: true, mode: 'window', message: '开发预览模式' } },
   async webconsole_firewall() { return { supported: true, allowed: false, rule: '', message: '开发预览模式' } },
   async webconsole_allow_firewall() { return { ok: false, message: '开发预览模式' } },
+  async power_control_status() {
+    return {
+      allowed: false,
+      actions: [
+        { key: 'shutdown', name: '关闭计算机', danger: true, delayable: true },
+        { key: 'restart', name: '重新启动', danger: true, delayable: true },
+        { key: 'sleep', name: '睡眠', danger: false, delayable: false },
+        { key: 'cancel', name: '取消关机', danger: false, delayable: false },
+      ],
+      minDelay: 15,
+      maxDelay: 600,
+      defaultDelay: 30,
+    }
+  },
+  async set_allow_power() { return { ok: false, allowed: false, message: '开发预览模式' } },
+  async chat_state() {
+    return {
+      active: false, role: '', roomCode: '', roomName: '', nickname: '', hostUrl: '',
+      myIp: '', port: 38620, members: [], messages: [], receivedDir: '', error: '',
+    }
+  },
+  async chat_host() { return { ok: false, message: '开发预览模式：无法开房间' } },
+  async chat_join() { return { ok: false, message: '开发预览模式：无法加入房间' } },
+  async chat_send_text() { return { ok: false, message: '开发预览模式' } },
+  async chat_send_file() { return { ok: false, message: '开发预览模式' } },
+  async chat_pick_file() { return { ok: false, path: '', message: '开发预览模式' } },
+  async chat_save_file() { return { ok: false, message: '开发预览模式' } },
+  async chat_leave() { return { ok: true, message: '开发预览模式' } },
+  async chat_clear_received() { return { ok: true, message: '开发预览模式' } },
   async search_music() { return [] },
   async music_url(path) { return path },
   async search_music_online() { return [] },

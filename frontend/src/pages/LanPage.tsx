@@ -186,6 +186,38 @@ export default function LanPage() {
     await load(true)
   }
 
+  // ── 远程电源控制（危险操作：默认关闭、延迟执行、二次确认）──
+  const [powerStatus, setPowerStatus] = useState<any>(null)
+  const [powerDelay, setPowerDelay] = useState(30)
+
+  const loadPower = async () => {
+    try {
+      const data = await api.power_control_status()
+      setPowerStatus(data)
+      setPowerDelay(Number(data?.defaultDelay) || 30)
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  useEffect(() => {
+    void loadPower()
+  }, [])
+
+  const doPower = async (action: string, name: string, danger: boolean) => {
+    if (!selected.length) {
+      notify('请先勾选要操作的设备')
+      return
+    }
+    const tip = danger
+      ? `确定让 ${selected.length} 台设备「${name}」吗？\n\n` +
+        `· ${powerDelay} 秒后执行，期间可以在同一位置点「取消关机」\n` +
+        `· 请先确认这些机器上没有未保存的课件或作业`
+      : `确定让 ${selected.length} 台设备「${name}」吗？`
+    if (!window.confirm(tip)) return
+    await sendAction('power', { mode: action, delay: powerDelay })
+  }
+
   const sendAction = async (action: string, payload?: any) => {
     if (!selected.length) {
       notify('请先勾选要操作的设备')
@@ -623,18 +655,6 @@ export default function LanPage() {
               >
                 锁屏
               </Button>
-              <Button
-                appearance="secondary"
-                onClick={() => void sendAction('power', { mode: 'restart', delay: 30 })}
-              >
-                重启（30 秒）
-              </Button>
-              <Button
-                appearance="secondary"
-                onClick={() => void sendAction('power', { mode: 'shutdown', delay: 30 })}
-              >
-                关机（30 秒）
-              </Button>
             </div>
           )}
 
@@ -664,6 +684,7 @@ export default function LanPage() {
           )}
 
           {nodes.length > 0 && (
+            <>
             <div className="oc-searchbar" style={{ marginTop: 10 }}>
               <Input
                 value={messageText}
@@ -684,6 +705,43 @@ export default function LanPage() {
                 发送消息
               </Button>
             </div>
+
+            {/* 电源控制：关机 / 重启 / 睡眠 / 休眠 / 取消关机 */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 5,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                marginTop: 10,
+                paddingTop: 10,
+                borderTop: '1px solid var(--oc-border)',
+              }}
+            >
+              <span className="oc-list-sub">电源控制</span>
+              {(powerStatus?.actions ?? []).map((item: any) => (
+                <Button
+                  key={item.key}
+                  size="small"
+                  appearance={item.danger ? 'primary' : 'secondary'}
+                  onClick={() => void doPower(item.key, item.name, Boolean(item.danger))}
+                >
+                  {item.name}
+                </Button>
+              ))}
+              <Input
+                value={String(powerDelay)}
+                onChange={(_e, data) => setPowerDelay(Number(data.value) || 30)}
+                style={{ width: 76 }}
+              />
+              <span className="oc-list-sub">秒后执行</span>
+            </div>
+            <div className="oc-hint" style={{ marginTop: 6 }}>
+              {powerStatus?.allowed
+                ? '本机已允许被远程控制电源。'
+                : '被控机器默认拒绝电源指令：需在那些机器的「设置 → 系统集成」里开启「允许远程电源控制」，否则关机 / 重启 / 睡眠会被拒绝（「取消关机」始终可用）。'}
+            </div>
+            </>
           )}
         </div>
       )}

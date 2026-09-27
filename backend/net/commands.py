@@ -98,41 +98,39 @@ def kill_process(pid: int) -> dict[str, Any]:
     }
 
 
-def power(mode: str, delay: int = 30) -> dict[str, Any]:
-    """关机 / 重启 / 锁屏。delay 为学生机上的倒计时（秒），默认 30 秒。"""
-    mode = (mode or "").lower()
-    if mode not in ("shutdown", "restart", "lock"):
-        return {"ok": False, "message": f"不支持的电源操作：{mode}", "data": {}}
-
+def lock_screen() -> dict[str, Any]:
+    """锁屏（不同于关机类动作，随点随生效，风险低）。"""
     try:
         if _windows():
-            if mode == "shutdown":
-                subprocess.Popen(
-                    ["shutdown", "/s", "/t", str(delay), "/c", "老师机下达关机指令"],
-                    creationflags=_CREATE_NO_WINDOW,
-                )
-                return {"ok": True, "message": f"{delay} 秒后关机", "data": {}}
-            if mode == "restart":
-                subprocess.Popen(
-                    ["shutdown", "/r", "/t", str(delay), "/c", "老师机下达重启指令"],
-                    creationflags=_CREATE_NO_WINDOW,
-                )
-                return {"ok": True, "message": f"{delay} 秒后重启", "data": {}}
-            subprocess.Popen(["rundll32.exe", "user32.dll,LockWorkStation"],
-                             creationflags=_CREATE_NO_WINDOW)
+            subprocess.Popen(
+                ["rundll32.exe", "user32.dll,LockWorkStation"],
+                creationflags=_CREATE_NO_WINDOW,
+            )
             return {"ok": True, "message": "已锁定屏幕", "data": {}}
-
-        # Linux / 国产系统
-        if mode == "shutdown":
-            subprocess.Popen(["shutdown", "-h", f"+{max(1, delay // 60)}"])
-            return {"ok": True, "message": f"约 {delay} 秒后关机", "data": {}}
-        if mode == "restart":
-            subprocess.Popen(["shutdown", "-r", f"+{max(1, delay // 60)}"])
-            return {"ok": True, "message": f"约 {delay} 秒后重启", "data": {}}
         subprocess.Popen(["loginctl", "lock-session"])
         return {"ok": True, "message": "已锁定屏幕", "data": {}}
     except (OSError, subprocess.SubprocessError) as exc:
-        return {"ok": False, "message": f"执行失败：{exc}", "data": {}}
+        return {"ok": False, "message": f"锁屏失败：{exc}", "data": {}}
+
+
+def power(mode: str, delay: int = 30, source: str = "") -> dict[str, Any]:
+    """关机 / 重启 / 睡眠 / 休眠 / 取消关机。
+
+    受「允许远程电源控制」开关约束（默认关闭）；只有「取消关机」始终放行 ——
+    误操作时总得有退路。真正的命令构造与执行在 core.power。
+    """
+    from ..core import power as power_core
+
+    action = (mode or "").lower()
+    if action == "lock":
+        return lock_screen()
+    if action != "cancel" and not power_core.allowed():
+        return {
+            "ok": False,
+            "message": "这台机器未开启远程电源控制（需在「设置 → 机房管理」里开启）",
+            "data": {},
+        }
+    return power_core.execute(action, int(delay or 30), source)
 
 
 def message(text: str) -> dict[str, Any]:
@@ -228,7 +226,11 @@ def execute(action: str, payload: dict[str, Any] | None = None) -> dict[str, Any
         if action == "kill":
             return kill_process(int(payload.get("pid") or 0))
         if action == "power":
-            return power(str(payload.get("mode") or ""), int(payload.get("delay") or 30))
+            return power(
+                str(payload.get("mode") or ""),
+                int(payload.get("delay") or 30),
+                str(payload.get("source") or ""),
+            )
         if action == "message":
             return message(str(payload.get("text") or ""))
         if action == "wallpaper":

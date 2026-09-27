@@ -406,6 +406,9 @@ class LanClient:
             elif action == "pull_file":
                 outcome = self._send_collection(server, token, payload)
             else:
+                # 电源类动作需要知道是谁下的指令（写进本机日志，便于事后追溯）
+                if action == "power":
+                    payload = {**payload, "source": self._teacher or ""}
                 outcome = execute(action, payload)
             results.append(
                 {

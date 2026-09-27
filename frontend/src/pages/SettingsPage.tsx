@@ -64,6 +64,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [startupMode, setStartupMode] = useState('window')
   const [startupMsg, setStartupMsg] = useState('')
   const [firewall, setFirewall] = useState<any>(null)
+  const [allowPower, setAllowPower] = useState(false)
 
   // ── 手机控制台 ──
   const [consoleState, setConsoleState] = useState<any>(null)
@@ -79,7 +80,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   useEffect(() => {
     void (async () => {
       try {
-        const [a, o, c, info, dir, mode, storage] = await Promise.all([
+        const [a, o, c, info, dir, mode, storage, power] = await Promise.all([
           api.get_autostart(),
           api.get_openwith_registered(),
           api.get_close_to_tray(),
@@ -87,7 +88,9 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           api.get_data_dir(),
           api.get_startup_mode(),
           api.get_storage_info(),
+          api.power_control_status(),
         ])
+        setAllowPower(Boolean(power?.allowed))
         setAutostart(a)
         setOpenwith(o)
         setCloseToTray(c)
@@ -181,6 +184,24 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
     try {
       const ok = await api.set_close_to_tray(checked)
       setCloseToTray(ok ? checked : closeToTray)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggleAllowPower = async (checked: boolean) => {
+    if (checked) {
+      const ok = window.confirm(
+        '开启后，已配对的教师机可以远程让这台机器关机 / 重启 / 睡眠。\n\n' +
+          '· 关机 / 重启会延迟执行，期间可在教师机点「取消关机」\n' +
+          '· 每次操作都会记录到本机运行日志\n\n确定开启吗？'
+      )
+      if (!ok) return
+    }
+    setBusy(true)
+    try {
+      const result = await api.set_allow_power(checked)
+      setAllowPower(Boolean(result?.allowed))
     } finally {
       setBusy(false)
     }
@@ -350,6 +371,14 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
                 {startupMsg && <span className="oc-usage-sub">{startupMsg}</span>}
               </div>
             </div>
+            <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
+            <SwitchRow
+              label="允许远程电源控制"
+              desc="开启后，已配对的教师机可以远程让这台机器关机 / 重启 / 睡眠。默认关闭；关机与重启会延迟执行，期间可在教师机取消（「取消关机」始终可用）"
+              checked={allowPower}
+              disabled={busy}
+              onChange={toggleAllowPower}
+            />
             <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
             <SwitchRow
               label="右键「打开方式」集成"
