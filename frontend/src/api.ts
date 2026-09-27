@@ -99,6 +99,12 @@ export interface OcApi {
   app_log_tail(lines?: number): Promise<any>
   app_log_clear(): Promise<any>
   open_log_folder(): Promise<boolean>
+  get_storage_info(): Promise<any>
+  report_frontend_error(message: string): Promise<any>
+  get_startup_mode(): Promise<string>
+  set_startup_mode(mode: string): Promise<any>
+  webconsole_firewall(): Promise<any>
+  webconsole_allow_firewall(): Promise<any>
   search_music(keyword?: string): Promise<any[]>
   music_url(path: string): Promise<string>
   search_music_online(keyword: string, platform?: string): Promise<any[]>
@@ -290,6 +296,14 @@ const MOCK_API: OcApi = {
   async app_log_tail() { return { text: '', path: '', dir: '', size: 0, exists: false } },
   async app_log_clear() { return { ok: true, message: '开发预览模式' } },
   async open_log_folder() { return false },
+  async get_storage_info() {
+    return { dataDir: '-', appRoot: '-', configFile: '-', portable: false, frozen: false, writable: true, migratedFrom: '' }
+  },
+  async report_frontend_error() { return { ok: true } },
+  async get_startup_mode() { return 'window' },
+  async set_startup_mode() { return { ok: true, mode: 'window', message: '开发预览模式' } },
+  async webconsole_firewall() { return { supported: true, allowed: false, rule: '', message: '开发预览模式' } },
+  async webconsole_allow_firewall() { return { ok: false, message: '开发预览模式' } },
   async search_music() { return [] },
   async music_url(path) { return path },
   async search_music_online() { return [] },

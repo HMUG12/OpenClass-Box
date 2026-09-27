@@ -888,6 +888,54 @@ class Api:
         """配置与运行时数据的实际存放目录（安装到 Program Files 时会回退到用户目录）。"""
         return str(paths.config_dir())
 
+    def get_storage_info(self) -> dict[str, Any]:
+        """数据存放位置详情（便携 / 安装模式、可写性、是否迁移过旧配置）。"""
+        from .core.paths import IS_FROZEN, app_root, migration_note, portable_mode
+
+        current = paths.config_dir()
+        return {
+            "dataDir": str(current),
+            "appRoot": str(app_root()),
+            "configFile": str(paths.config_file()),
+            "portable": portable_mode(),
+            "frozen": bool(IS_FROZEN),
+            "writable": paths.is_writable(current),
+            "migratedFrom": migration_note(),
+        }
+
+    def report_frontend_error(self, message: str) -> dict[str, Any]:
+        """前端页面异常上报（错误边界调用），写入运行日志便于回查。"""
+        from .core.applog import log
+
+        log(f"前端页面异常：{str(message)[:800]}", "ERROR")
+        return {"ok": True}
+
+    def get_startup_mode(self) -> str:
+        """启动时的窗口行为：window = 显示界面（默认），silent = 静默启动到托盘。"""
+        return str(config.get("startup_mode", "window"))
+
+    def set_startup_mode(self, mode: str) -> dict[str, Any]:
+        """设置启动行为（下次启动生效）。"""
+        value = "silent" if str(mode).lower() == "silent" else "window"
+        ok = config.set("startup_mode", value)
+        return {
+            "ok": ok,
+            "mode": value,
+            "message": "已保存（下次启动生效）" if ok else "保存失败（数据目录不可写）",
+        }
+
+    def webconsole_firewall(self) -> dict[str, Any]:
+        """手机控制台的防火墙放行状态。"""
+        from .core.webconsole import firewall_status
+
+        return firewall_status()
+
+    def webconsole_allow_firewall(self) -> dict[str, Any]:
+        """一键放行防火墙（需要管理员权限，会弹 UAC 确认）。"""
+        from .core.webconsole import allow_firewall
+
+        return allow_firewall()
+
     def get_close_to_tray(self) -> bool:
         """关闭窗口时是否最小化到托盘（默认开启）。"""
         return bool(config.get("close_to_tray", True))

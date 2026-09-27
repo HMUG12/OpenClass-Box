@@ -33,6 +33,7 @@ import MaintenancePage from './pages/MaintenancePage'
 import HardwarePage from './pages/HardwarePage'
 import LanPage from './pages/LanPage'
 import ClassroomPage from './pages/ClassroomPage'
+import ErrorBoundary from './components/ErrorBoundary'
 
 /**
  * 导航结构（已按使用习惯合并）：
@@ -250,7 +251,7 @@ export default function App() {
               <Spinner size="medium" label="正在加载…" />
             </div>
           ) : (
-            renderPage()
+            <ErrorBoundary key={page}>{renderPage()}</ErrorBoundary>
           )}
 
           {/* 右下角版本标识 */}

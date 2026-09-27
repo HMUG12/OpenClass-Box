@@ -60,6 +60,10 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [busy, setBusy] = useState(false)
 
   const [dataDir, setDataDir] = useState('')
+  const [storage, setStorage] = useState<any>(null)
+  const [startupMode, setStartupMode] = useState('window')
+  const [startupMsg, setStartupMsg] = useState('')
+  const [firewall, setFirewall] = useState<any>(null)
 
   // ── 手机控制台 ──
   const [consoleState, setConsoleState] = useState<any>(null)
@@ -75,18 +79,22 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   useEffect(() => {
     void (async () => {
       try {
-        const [a, o, c, info, dir] = await Promise.all([
+        const [a, o, c, info, dir, mode, storage] = await Promise.all([
           api.get_autostart(),
           api.get_openwith_registered(),
           api.get_close_to_tray(),
           api.get_info(),
           api.get_data_dir(),
+          api.get_startup_mode(),
+          api.get_storage_info(),
         ])
         setAutostart(a)
         setOpenwith(o)
         setCloseToTray(c)
         setVersion(info.version)
         setDataDir(dir)
+        setStartupMode(mode ?? 'window')
+        setStorage(storage ?? null)
       } catch {
         // 忽略：开发模式下拿不到真实值
       } finally {
@@ -138,6 +146,36 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
     }
   }
 
+  const chooseStartup = async (mode: string) => {
+    setBusy(true)
+    try {
+      const result = await api.set_startup_mode(mode)
+      setStartupMode(result?.mode ?? mode)
+      setStartupMsg(result?.message ?? '')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const loadFirewall = async () => {
+    try {
+      setFirewall(await api.webconsole_firewall())
+    } catch {
+      setFirewall(null)
+    }
+  }
+
+  const allowFirewall = async () => {
+    setConsoleBusy(true)
+    try {
+      const result = await api.webconsole_allow_firewall()
+      setConsoleMsg(result?.message ?? '')
+      window.setTimeout(() => void loadFirewall(), 3000)
+    } finally {
+      setConsoleBusy(false)
+    }
+  }
+
   const toggleCloseToTray = async (checked: boolean) => {
     setBusy(true)
     try {
@@ -159,6 +197,10 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   useEffect(() => {
     void loadConsole()
   }, [])
+
+  useEffect(() => {
+    if (consoleState?.running) void loadFirewall()
+  }, [consoleState?.running])
 
   const toggleConsole = async (checked: boolean) => {
     setConsoleBusy(true)
@@ -283,6 +325,32 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
               onChange={toggleCloseToTray}
             />
             <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
+            <div style={{ padding: '8px 0' }}>
+              <div style={{ fontWeight: 600 }}>启动时的窗口行为</div>
+              <div className="oc-usage-sub">
+                静默启动需要托盘支持：程序启动后直接缩到托盘，点托盘图标再打开（下次启动生效）
+              </div>
+              <div className="oc-actions" style={{ marginTop: 8 }}>
+                <Button
+                  size="small"
+                  appearance={startupMode === 'window' ? 'primary' : 'secondary'}
+                  disabled={busy}
+                  onClick={() => void chooseStartup('window')}
+                >
+                  显示界面（默认）
+                </Button>
+                <Button
+                  size="small"
+                  appearance={startupMode === 'silent' ? 'primary' : 'secondary'}
+                  disabled={busy}
+                  onClick={() => void chooseStartup('silent')}
+                >
+                  静默启动到托盘
+                </Button>
+                {startupMsg && <span className="oc-usage-sub">{startupMsg}</span>}
+              </div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
             <SwitchRow
               label="右键「打开方式」集成"
               desc="把 OpenClass-Box 收编进文件的右键打开方式菜单（需打包为 exe 后生效）"
@@ -347,9 +415,28 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
                   更换访问码
                 </Button>
                 <span className="oc-usage-sub">已登录手机：{consoleState.clients ?? 0} 台</span>
+                {firewall?.supported && !firewall?.allowed && (
+                  <Button
+                    size="small"
+                    appearance="primary"
+                    disabled={consoleBusy}
+                    onClick={() => void allowFirewall()}
+                  >
+                    放行防火墙（手机连不上时点这里）
+                  </Button>
+                )}
               </div>
+              {firewall?.supported && (
+                <div className="oc-usage-sub" style={{ marginTop: 6 }}>
+                  防火墙：{firewall.message}
+                  {firewall.allowed
+                    ? ''
+                    : ' —— Windows 默认拦截入站连接，未放行时只有本机能打开这个地址'}
+                </div>
+              )}
               <div className="oc-usage-sub" style={{ marginTop: 8 }}>
                 只允许局域网来源访问；连续输错 5 次会锁定 1 分钟；关闭开关后所有手机立即失效。
+                若已放行仍连不上：确认手机与电脑在同一个 WiFi，且路由器没有开启「AP 隔离」。
               </div>
             </div>
           </>
@@ -473,10 +560,37 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           <span>配置与数据</span>
           <span className="oc-mono">{dataDir || '读取中…'}</span>
         </div>
+        {storage && (
+          <>
+            <div className="oc-info-row">
+              <span>运行模式</span>
+              <span>
+                {storage.portable
+                  ? '便携模式（数据跟随程序，插到哪台机器都是同一套设置）'
+                  : storage.frozen
+                    ? '安装模式（数据在用户目录，不受权限影响）'
+                    : '开发模式（数据在项目目录）'}
+                {storage.writable === false ? ' · 数据目录不可写' : ''}
+              </span>
+            </div>
+            <div className="oc-info-row">
+              <span>配置文件</span>
+              <span className="oc-mono">{storage.configFile}</span>
+            </div>
+          </>
+        )}
         <div className="oc-hint" style={{ marginTop: 8 }}>
           所有设置会立即写入上面的目录。若程序安装在 Program Files 这类受保护位置，
-          会自动改用用户目录（%LOCALAPPDATA%\OpenClass-Box），保证设置一定保存成功。
+          会自动改用用户目录（%LOCALAPPDATA%\OpenClass-Box）——
+          Program Files 下管理员与普通用户看到的不是同一份文件，配置文件放那里会出现
+          「这次保存成功、下次打开又变回去」。
         </div>
+        {storage?.migratedFrom && (
+          <div className="oc-hint" style={{ marginTop: 8 }}>
+            已从旧位置迁移配置：{storage.migratedFrom}
+            （原位置的文件不会被删除，确认无误后可自行清理）
+          </div>
+        )}
         <div className="oc-actions" style={{ marginTop: 10 }}>
           <Button appearance="secondary" onClick={() => void api.open_tool_dir()}>
             打开 tools 目录

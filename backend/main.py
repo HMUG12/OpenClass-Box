@@ -222,6 +222,13 @@ class AppHost:
         # frameless：仅标题栏(.oc-titlebar-drag)可拖，其余区域(按钮)正常可点
         webview.settings['DRAG_REGION_SELECTOR'] = '.oc-titlebar-drag'
 
+        # 渲染兼容：部分一体机（老显卡 / 驱动）在 WebView2 硬件合成下会出现
+        # 「点某些界面整窗黑屏」，关掉 GPU 合成即可绕开（对日常使用影响很小）。
+        # 用环境变量设置，用户/我们都能用 system_settings 覆盖。
+        os.environ.setdefault(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu-compositing"
+        )
+
         self.window = webview.create_window(
             title=WINDOW_TITLE,
             url=url,
@@ -291,7 +298,8 @@ class AppHost:
             except Exception:
                 pass
 
-        if hidden or files:
+        # 静默启动必须有托盘兜底：否则窗口一藏起来，用户就再也打不开了
+        if (hidden and self.tray.available) or files:
             # 注意：webview.start() 之前窗口尚未就绪，此时直接 hide() 会抛
             # "Main window failed to start"。改为窗口显示完成后再隐藏。
             def _hide_after_shown() -> None:
@@ -359,11 +367,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[OpenClass] 右键「打开方式」{verb}: {'成功' if ok else '失败（需以 OpenClass.exe 运行）'}")
         return 0 if (ok or args.unregister_openwith) else 1
 
+    # 启动行为可配置：silent = 静默启动到托盘（默认 window = 显示界面）
+    hidden = bool(args.hidden)
+    if not hidden:
+        try:
+            from .core.config import config
+
+            hidden = str(config.get("startup_mode", "window")).lower() == "silent"
+        except Exception:
+            hidden = False
+
     try:
         AppHost().run(
             dev=args.dev,
             debug=args.debug,
-            hidden=args.hidden,
+            hidden=hidden,
             files=args.files or None,
             role=args.role,
         )

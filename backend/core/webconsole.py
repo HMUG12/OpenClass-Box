@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import os
 import secrets
 import threading
 import time
@@ -528,6 +529,7 @@ def regenerate() -> str:
 def status() -> dict[str, Any]:
     from .monitor import local_ip
 
+
     with _lock:
         running = _server is not None
         port = _port
@@ -542,4 +544,73 @@ def status() -> dict[str, Any]:
         "url": f"http://{ip}:{port}" if (running and ip) else "",
         "clients": clients,
         "portDefault": DEFAULT_PORT,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# 防火墙放行
+#
+# 手机连不上最常见的原因不是服务没开，而是 **Windows 防火墙默认拦截入站连接**：
+# 本机能打开 127.0.0.1，局域网里的手机却被挡在门外。这里做两件事：
+#   1. 检测是否已有放行规则（不给用户猜）；
+#   2. 一键添加规则（需要管理员，弹 UAC 确认）。
+# 规则只对「专用 / 域」网络放行，公共网络（咖啡厅 WiFi）依然关闭，避免误暴露。
+# ══════════════════════════════════════════════════════════════
+
+_FIREWALL_RULE = "OpenClass-Box 手机控制台"
+
+
+def _run(args: list[str], timeout: float = 12.0) -> str:
+    import subprocess
+
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        proc = subprocess.run(args, capture_output=True, timeout=timeout, creationflags=flags)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    for encoding in ("gbk", "utf-8", "latin-1"):
+        try:
+            return proc.stdout.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return ""
+
+
+def firewall_status() -> dict[str, Any]:
+    """检查入站放行规则是否存在。"""
+    if os.name != "nt":
+        return {"supported": False, "allowed": True, "message": "非 Windows 系统无需放行"}
+    output = _run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={_FIREWALL_RULE}"])
+    allowed = "OpenClass-Box" in output
+    return {
+        "supported": True,
+        "allowed": allowed,
+        "rule": _FIREWALL_RULE,
+        "message": "已放行" if allowed else "未放行：手机可能连不上（防火墙默认拦截入站）",
+    }
+
+
+def allow_firewall() -> dict[str, Any]:
+    """添加防火墙放行规则（管理员权限，弹 UAC）。"""
+    if os.name != "nt":
+        return {"ok": False, "message": "仅支持 Windows"}
+    port = _port or DEFAULT_PORT
+    command = (
+        f'netsh advfirewall firewall delete rule name="{_FIREWALL_RULE}" >nul 2>nul & '
+        f'netsh advfirewall firewall add rule name="{_FIREWALL_RULE}" dir=in action=allow '
+        f"protocol=TCP localport={port} profile=private,domain"
+    )
+    try:
+        import ctypes
+
+        result = ctypes.windll.shell32.ShellExecuteW(  # type: ignore[attr-defined]
+            None, "runas", "cmd.exe", f"/c {command}", None, 0
+        )
+    except Exception as exc:
+        return {"ok": False, "message": f"提权失败：{exc}"}
+    if result <= 32:
+        return {"ok": False, "message": "已取消或提权失败（需要管理员同意）"}
+    return {
+        "ok": True,
+        "message": f"已请求放行 TCP {port}（仅专用/域网络）。请在系统弹窗中确认后刷新状态。",
     }
