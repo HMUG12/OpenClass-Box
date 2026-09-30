@@ -4,6 +4,7 @@ import { api } from '../api'
 import HealthPage from './HealthPage'
 import DiagnosticsPage from './DiagnosticsPage'
 import TermPanel from '../components/TermPanel'
+import ClassroomPage from './ClassroomPage'
 
 function formatSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B'
@@ -438,7 +439,7 @@ function PortablePanel() {
   )
 }
 
-type Tab = 'checkup' | 'repair' | 'diagnostics' | 'term' | 'portable'
+type Tab = 'classroom' | 'checkup' | 'repair' | 'diagnostics' | 'term' | 'portable'
 
 export default function MaintenancePage() {
   const [tab, setTab] = useState<Tab>('checkup')
@@ -451,7 +452,13 @@ export default function MaintenancePage() {
       </div>
 
       <div className="oc-toolbar" style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <Button
+            appearance={tab === 'classroom' ? 'primary' : 'secondary'}
+            onClick={() => setTab('classroom')}
+          >
+            课堂
+          </Button>
           <Button
             appearance={tab === 'checkup' ? 'primary' : 'secondary'}
             onClick={() => setTab('checkup')}
@@ -485,6 +492,7 @@ export default function MaintenancePage() {
         </div>
       </div>
 
+      {tab === 'classroom' && <ClassroomPage />}
       {tab === 'checkup' && <HealthPage />}
       {tab === 'repair' && <RepairPanel />}
       {tab === 'diagnostics' && <DiagnosticsPage />}

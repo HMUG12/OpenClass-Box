@@ -11,6 +11,40 @@ interface Props {
   setThemeMode: (m: ThemeMode) => void
 }
 
+/** 把外观偏好写到 <html> 的 data-* 上（与 App 里的逻辑一致，改完立即生效） */
+function applyAppearanceNow(looks: any) {
+  const root = document.documentElement
+  if (looks?.accent && looks.accent !== 'default') root.setAttribute('data-accent', looks.accent)
+  else root.removeAttribute('data-accent')
+  root.setAttribute('data-radius', looks?.radius || 'standard')
+  root.setAttribute('data-font', looks?.font || 'standard')
+  root.setAttribute('data-glass', looks?.glass ? 'on' : 'off')
+}
+
+/** 配色方案：经典蓝 + 多巴胺色系（高饱和、明快） */
+const ACCENTS: { id: string; label: string; color: string }[] = [
+  { id: 'default', label: '经典蓝', color: '#0f6cbd' },
+  { id: 'peach', label: '蜜桃橙', color: '#ff7a45' },
+  { id: 'mint', label: '薄荷绿', color: '#12b886' },
+  { id: 'lemon', label: '柠檬黄', color: '#f5a524' },
+  { id: 'sky', label: '海盐蓝', color: '#1c9cd6' },
+  { id: 'sakura', label: '樱花粉', color: '#e64980' },
+  { id: 'grape', label: '葡萄紫', color: '#7950f2' },
+  { id: 'coral', label: '珊瑚橘', color: '#f06595' },
+]
+
+const RADII: { id: string; label: string }[] = [
+  { id: 'compact', label: '紧凑' },
+  { id: 'standard', label: '标准' },
+  { id: 'round', label: '圆润' },
+]
+
+const FONTS: { id: string; label: string }[] = [
+  { id: 'compact', label: '小' },
+  { id: 'standard', label: '标准' },
+  { id: 'large', label: '大' },
+]
+
 const OPTIONS: { id: ThemeMode; label: string; icon: ReactNode; desc: string }[] = [
   { id: 'light', label: '浅色', icon: <WeatherSunnyRegular fontSize={16} />, desc: '明亮环境下的默认外观' },
   { id: 'dark', label: '深色', icon: <WeatherMoonRegular fontSize={16} />, desc: '低光环境，减轻眼部疲劳' },
@@ -67,6 +101,29 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [startupMsg, setStartupMsg] = useState('')
   const [startupAnimation, setStartupAnimation] = useState(true)
   const [autoMsg, setAutoMsg] = useState('')
+
+  // ── 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）──
+  const [appearance, setAppearance] = useState<any>({
+    accent: 'default',
+    radius: 'standard',
+    font: 'standard',
+    glass: false,
+  })
+
+  const saveAppearance = async (patch: Record<string, any>) => {
+    const next = { ...appearance, ...patch }
+    setAppearance(next)   // 先本地生效，手感更跟手
+    applyAppearanceNow(next)
+    try {
+      const result = await api.set_appearance(patch)
+      if (result?.appearance) setAppearance(result.appearance)
+      if (result?.ok === false) setAppMsg('外观设置保存失败（数据目录不可写）')
+      else setAppMsg('')
+    } catch {
+      setAppMsg('外观设置保存失败')
+    }
+  }
+  const [appMsg, setAppMsg] = useState('')
   const [firewall, setFirewall] = useState<any>(null)
   const [allowPower, setAllowPower] = useState(false)
 
@@ -74,6 +131,33 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [lan, setLan] = useState({ serverUrl: '', port: 38900, proxy: '' })
   const [lanMsg, setLanMsg] = useState('')
   const [lanBusy, setLanBusy] = useState(false)
+
+  // ── 被链接（B 端加入老师机）──
+  const [joinCode, setJoinCode] = useState('')
+  const [joinMsg, setJoinMsg] = useState('')
+
+  const joinTeacher = async () => {
+    setBusy(true)
+    setJoinMsg('')
+    try {
+      const result = await api.lan_join(lan.serverUrl.trim(), joinCode.trim())
+      setJoinMsg(result?.message ?? '')
+    } catch (error) {
+      setJoinMsg(`连接失败：${error}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const leaveTeacher = async () => {
+    setBusy(true)
+    try {
+      const result = await api.lan_leave()
+      setJoinMsg(result?.message ?? '')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   // ── 局域网放行 + 密码保护 ──
   const [fw, setFw] = useState<any>(null)
@@ -179,6 +263,12 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         setStorage(storage ?? null)
         try {
           setDiag(await api.config_diag())
+        } catch {
+          /* 开发预览模式忽略 */
+        }
+        try {
+          const looks = await api.get_appearance()
+          if (looks) setAppearance(looks)
         } catch {
           /* 开发预览模式忽略 */
         }
@@ -455,6 +545,93 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
             <div className="oc-toolcard-desc">{o.desc}</div>
           </div>
         ))}
+      </div>
+
+      {/* 外观自定义：配色 / 圆角 / 字号 / 毛玻璃 */}
+      <div className="oc-panel" style={{ marginBottom: 12, marginTop: 12 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>配色方案</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {ACCENTS.map((item) => {
+            const active = (appearance.accent || 'default') === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => void saveAppearance({ accent: item.id })}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px 6px 7px',
+                  borderRadius: 'var(--oc-radius-lg)',
+                  border: `1.5px solid ${active ? item.color : 'var(--oc-border)'}`,
+                  background: active ? `${item.color}22` : 'transparent',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                }}
+              >
+                <span
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    background: item.color,
+                    flexShrink: 0,
+                  }}
+                />
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--oc-border)', margin: '14px 0 10px' }} />
+
+        <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>圆角</div>
+            <div className="oc-actions">
+              {RADII.map((item) => (
+                <Button
+                  key={item.id}
+                  size="small"
+                  appearance={appearance.radius === item.id ? 'primary' : 'secondary'}
+                  onClick={() => void saveAppearance({ radius: item.id })}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>字号</div>
+            <div className="oc-actions">
+              {FONTS.map((item) => (
+                <Button
+                  key={item.id}
+                  size="small"
+                  appearance={appearance.font === item.id ? 'primary' : 'secondary'}
+                  onClick={() => void saveAppearance({ font: item.id })}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--oc-border)', margin: '12px 0 4px' }} />
+        <SwitchRow
+          label="毛玻璃卡片"
+          desc="卡片半透明 + 背景模糊，透出配色带来的柔和光斑（观感更高级；老旧显卡若觉得卡可以关掉）"
+          checked={Boolean(appearance.glass)}
+          onChange={(value) => void saveAppearance({ glass: value })}
+        />
+        {appMsg && (
+          <div className="oc-usage-sub" style={{ marginTop: 6 }}>
+            {appMsg}
+          </div>
+        )}
       </div>
 
       <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
@@ -845,6 +1022,43 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         <div className="oc-usage-sub" style={{ marginTop: 8 }}>
           忘记密码：删除数据目录下的 passcode.json 即可复位（删除前请确认是本人操作）。
         </div>
+      </div>
+
+      <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
+        被链接（B 端加入老师机）
+      </div>
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+          B 端只作为被管理端：填老师机地址与配对码即可接入（地址留空则在本局域网内自动发现）。
+          接入后老师机可统一下发体检、修复、清理、消息、文件与壁纸；
+          本机的「机房管理」页只显示连接状态，不再提供主动连接入口。
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Input
+            value={lan.serverUrl}
+            onChange={(_e, data) => setLan({ ...lan, serverUrl: data.value })}
+            placeholder="老师机地址（留空自动发现，如 192.168.1.10:38900）"
+            style={{ minWidth: 280, flex: 1 }}
+          />
+          <Input
+            type="password"
+            value={joinCode}
+            onChange={(_e, data) => setJoinCode(data.value)}
+            placeholder="配对码"
+            style={{ width: 160 }}
+          />
+          <Button size="small" appearance="primary" disabled={busy} onClick={() => void joinTeacher()}>
+            连接老师机
+          </Button>
+          <Button size="small" appearance="secondary" disabled={busy} onClick={() => void leaveTeacher()}>
+            断开
+          </Button>
+        </div>
+        {joinMsg && (
+          <div className="oc-usage-sub" style={{ marginTop: 8 }}>
+            {joinMsg}
+          </div>
+        )}
       </div>
 
       <RemotePanel />

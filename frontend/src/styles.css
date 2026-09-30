@@ -34,6 +34,140 @@
   --oc-mono: 'Cascadia Mono', 'Consolas', 'SF Mono', monospace;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   外观自定义（设置 → 外观）
+   通过 .oc-root 上的 data-* 属性切换，默认观感不变：
+     data-accent 配色方案 · data-glass 毛玻璃
+     data-radius 圆角 · data-font 字号
+   ═══════════════════════════════════════════════════════════ */
+
+/* 配色方案：oean 为 Fluent 蓝（默认），其余是多巴胺色系（高饱和、明快） */
+[data-accent='peach'] {
+  --oc-accent: #ff7a45;
+  --oc-accent-soft: rgba(255, 122, 69, 0.16);
+}
+[data-accent='mint'] {
+  --oc-accent: #12b886;
+  --oc-accent-soft: rgba(18, 184, 134, 0.16);
+}
+[data-accent='lemon'] {
+  --oc-accent: #f5a524;
+  --oc-accent-soft: rgba(245, 165, 36, 0.18);
+}
+[data-accent='sakura'] {
+  --oc-accent: #e64980;
+  --oc-accent-soft: rgba(230, 73, 128, 0.16);
+}
+[data-accent='grape'] {
+  --oc-accent: #7950f2;
+  --oc-accent-soft: rgba(121, 80, 242, 0.16);
+}
+[data-accent='sky'] {
+  --oc-accent: #1c9cd6;
+  --oc-accent-soft: rgba(28, 156, 214, 0.16);
+}
+[data-accent='coral'] {
+  --oc-accent: #f06595;
+  --oc-accent-soft: rgba(240, 101, 149, 0.16);
+}
+
+/* 圆角：紧凑 / 标准 / 圆润 */
+[data-radius='compact'] {
+  --oc-radius-sm: 4px;
+  --oc-radius: 6px;
+  --oc-radius-lg: 9px;
+}
+[data-radius='round'] {
+  --oc-radius-sm: 10px;
+  --oc-radius: 15px;
+  --oc-radius-lg: 22px;
+}
+
+/* 字号：整体缩放（只动根字号与次要文字，不改结构） */
+[data-font='compact'] {
+  font-size: 13px;
+}
+[data-font='large'] {
+  font-size: 15.5px;
+}
+[data-font='large'] .oc-page-desc,
+[data-font='large'] .oc-list-sub,
+[data-font='large'] .oc-hint,
+[data-font='large'] .oc-usage-sub {
+  font-size: 13px;
+}
+
+/* 毛玻璃：内容区铺一层柔和光斑，卡片半透明模糊 —— 有光斑透出来才有"玻璃感" */
+[data-glass='on'] .oc-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 560px at 8% -12%, var(--oc-accent-soft), transparent 62%),
+    radial-gradient(820px 480px at 96% 4%, rgba(255, 255, 255, 0.07), transparent 58%),
+    radial-gradient(700px 420px at 62% 112%, var(--oc-accent-soft), transparent 60%);
+}
+
+[data-glass='on'] .oc-panel,
+[data-glass='on'] .oc-toolcard,
+[data-glass='on'] .oc-stat,
+[data-glass='on'] .oc-device {
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: light) {
+  [data-glass='on'] .oc-panel,
+  [data-glass='on'] .oc-toolcard,
+  [data-glass='on'] .oc-stat,
+  [data-glass='on'] .oc-device {
+    background: rgba(255, 255, 255, 0.62);
+    border-color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   小窗口排版（窗口最小 900×600，窄屏时按下面两档收紧）
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 1060px) {
+  :root {
+    --oc-sidenav-w: 186px;
+  }
+  .oc-page {
+    padding: 18px 18px 28px;
+  }
+  .oc-page-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .oc-device {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 960px) {
+  :root {
+    --oc-sidenav-w: 162px;
+  }
+  .oc-page {
+    padding: 14px 14px 24px;
+  }
+  .oc-info-row {
+    flex-wrap: wrap;
+  }
+  .oc-info-row > span:last-child {
+    text-align: left;
+  }
+  .oc-actions {
+    gap: 6px;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

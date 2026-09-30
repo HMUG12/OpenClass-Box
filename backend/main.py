@@ -274,6 +274,7 @@ class AppHost:
         )
         self.api.attach_window(self.window)
         self.api.attach_reveal(self._reveal_window)
+        self.api.attach_tray(self.tray)
         self.api.tray_available = self.tray.available
         self._start_hidden = bool(hidden or files)
 

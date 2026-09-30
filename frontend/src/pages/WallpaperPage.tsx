@@ -48,9 +48,22 @@ export default function WallpaperPage() {
     void load()
   }, [])
 
-  const notify = (text: string) => {
+  const [msgError, setMsgError] = useState(false)
+
+  /**
+   * 提示消息。
+   * sticky=true 时不自动消失 —— 动态壁纸失败的原因（缺 mpv / 桌面承载窗口
+   * 定位失败 / 显卡组合不支持）必须留在页面上，否则用户没看清就以为"点了没反应"。
+   */
+  const notify = (text: string, sticky = false, error = false) => {
     setMsg(text)
-    window.setTimeout(() => setMsg(''), 3200)
+    setMsgError(error)
+    if (!sticky) {
+      window.setTimeout(() => {
+        setMsg('')
+        setMsgError(false)
+      }, 3600)
+    }
   }
 
   const apply = async (path: string, kind: string) => {
@@ -60,7 +73,8 @@ export default function WallpaperPage() {
       return
     }
     const result = await api.set_dynamic_wallpaper(path)
-    notify(result?.message ?? '')
+    // 失败原因必须留在页面上（见 notify 的说明）
+    notify(result?.message ?? '', !result?.ok, !result?.ok)
     void refreshDyn()
   }
 
@@ -153,7 +167,7 @@ export default function WallpaperPage() {
           </Button>
         </div>
         {msg && (
-          <div className="oc-list-sub" style={{ marginTop: 8 }}>
+          <div className={msgError ? 'oc-list-warn' : 'oc-list-sub'} style={{ marginTop: 8 }}>
             {msg}
           </div>
         )}

@@ -168,6 +168,84 @@ export default function LanPage() {
   const client = status?.client
   const onlineNodes = nodes.filter((node) => node.online)
 
+  // B 端（被管理端）：只展示"被谁管理 + 连接状态"。
+  // B 端不提供主动连接别的机器，连接配置统一收在「设置 → 被链接（B 端）」，
+  // 避免学生在一体机上乱点把机器接到错误的老师机。
+  if (mode === 'student') {
+    const stateText =
+      client?.state === 'connected'
+        ? '已连接老师机'
+        : client?.state === 'connecting'
+          ? '正在连接…'
+          : client?.state === 'error'
+            ? '连接异常'
+            : '未连接'
+    return (
+      <div className="oc-page">
+        <div className="oc-page-header">
+          <div>
+            <div className="oc-page-title">机房管理</div>
+            <div className="oc-page-desc">
+              本机是 B 端（被管理端）：由老师机统一管理，不主动连接其他机器
+            </div>
+          </div>
+          <div className="oc-device">
+            <div className="oc-device-model">B 端 · 被管理</div>
+            <div className="oc-device-sub">{client?.message ?? ''}</div>
+          </div>
+        </div>
+
+        <div className="oc-panel">
+          <div className="oc-info-row">
+            <span>连接状态</span>
+            <span>{stateText}</span>
+          </div>
+          <div className="oc-info-row">
+            <span>老师机</span>
+            <span className="oc-mono">
+              {client?.teacher || client?.server || '（未连接）'}
+            </span>
+          </div>
+          <div className="oc-info-row">
+            <span>本机标识</span>
+            <span className="oc-mono">{client?.nodeId || '—'}</span>
+          </div>
+          <div className="oc-info-row">
+            <span>配对状态</span>
+            <span>{client?.paired ? '已配对' : '未配对'}</span>
+          </div>
+          <div className="oc-actions" style={{ marginTop: 12 }}>
+            <Button
+              size="small"
+              appearance="secondary"
+              onClick={() => void load(true)}
+            >
+              刷新状态
+            </Button>
+            <Button
+              size="small"
+              appearance="secondary"
+              disabled={!client?.enabled}
+              onClick={() =>
+                void (async () => {
+                  const result = await api.lan_leave()
+                  notify(result?.message ?? '')
+                  await load(true)
+                })()
+              }
+            >
+              断开与老师机的连接
+            </Button>
+          </div>
+          <div className="oc-hint" style={{ marginTop: 10 }}>
+            连接配置（老师机地址 / 配对码）在「设置 → 被链接（B 端）」里填写；
+            老师机下达的体检、修复、清理、换壁纸等指令会在本机执行并回报结果。
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const startServer = async () => {
     const result = await api.lan_start_server(38900)
     notify(result?.message ?? '')

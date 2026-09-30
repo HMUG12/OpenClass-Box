@@ -61,6 +61,25 @@ class Api:
         """注入「首屏就绪后显示窗口」的回调（由 main 提供动画实现）。"""
         self._reveal = func
 
+    def attach_tray(self, tray: Any) -> None:
+        """注入托盘实例：需要"弹给用户看"的提示走系统气泡（窗口收在托盘也看得见）。"""
+        self._tray = tray
+
+    def _notify(self, title: str, message: str) -> None:
+        """优先用系统托盘气泡提示，失败则退回运行日志（绝不静默丢失）。"""
+        tray = getattr(self, "_tray", None)
+        try:
+            if tray is not None and tray.notify(title, message):
+                return
+        except Exception:
+            pass
+        try:
+            from .core.applog import log
+
+            log(f"{title}：{message}", "WARN")
+        except Exception:
+            pass
+
     def frontend_ready(self) -> dict[str, Any]:
         """前端首屏渲染完成 —— 此时才让窗口露面。
 
@@ -1436,6 +1455,36 @@ class Api:
     def set_close_to_tray(self, value: bool) -> bool:
         return bool(config.set("close_to_tray", bool(value)))
 
+    # ── 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）────────────
+
+    def get_appearance(self) -> dict[str, Any]:
+        """界面外观偏好（前端把它映射成 .oc-root 上的 data-* 属性）。"""
+        return {
+            "accent": str(config.get("appearance_accent", "default") or "default"),
+            "radius": str(config.get("appearance_radius", "standard") or "standard"),
+            "font": str(config.get("appearance_font", "standard") or "standard"),
+            "glass": bool(config.get("appearance_glass", False)),
+        }
+
+    def set_appearance(
+        self,
+        accent: str | None = None,
+        radius: str | None = None,
+        font: str | None = None,
+        glass: bool | None = None,
+    ) -> dict[str, Any]:
+        """保存外观偏好（每一项独立可选，如实返回落盘结果）。"""
+        ok = True
+        if accent is not None:
+            ok = bool(config.set("appearance_accent", str(accent))) and ok
+        if radius is not None:
+            ok = bool(config.set("appearance_radius", str(radius))) and ok
+        if font is not None:
+            ok = bool(config.set("appearance_font", str(font))) and ok
+        if glass is not None:
+            ok = bool(config.set("appearance_glass", bool(glass))) and ok
+        return {"ok": ok, "appearance": self.get_appearance()}
+
     def launch_tool(self, tool_id: str, file_path: str | None = None) -> dict[str, Any]:
         spec = registry.get(tool_id)
         if spec is None:
@@ -1480,13 +1529,26 @@ class Api:
         return {"ok": False, "message": message}
 
     def open_file_with(self, path: str) -> dict[str, Any]:
-        """按扩展名路由到集成工具并打开该文件（右键「打开方式」后端）。"""
+        """按扩展名路由到集成工具并打开该文件（右键「打开方式」后端）。
+
+        「双击文件没反应」是最容易被当成 bug 的体验问题：右键打开方式时窗口
+        通常不在前台，光返回一个 message 用户根本看不到。所以失败（以及成功）
+        都额外弹一次系统托盘提示，确保有反馈。
+        """
         from .core.app_locator import route_file
 
         tool_id = route_file(path)
         if not tool_id:
-            return {"ok": False, "message": f"暂不支持以集成套件打开该类型：{Path(path).suffix}"}
-        return self.launch_tool(tool_id, path)
+            message = f"暂不支持以集成套件打开该类型：{Path(path).suffix or '（无扩展名）'}"
+            self._notify("打开方式", message)
+            return {"ok": False, "message": message}
+
+        result = self.launch_tool(tool_id, path)
+        if not result.get("ok"):
+            self._notify("打开失败", str(result.get("message") or "未知原因"))
+        else:
+            self._notify("已打开", str(result.get("message") or ""))
+        return result
 
     def reveal_tool(self, tool_id: str) -> bool:
         """在资源管理器中定位工具所在位置。"""

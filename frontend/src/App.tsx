@@ -15,7 +15,6 @@ import {
   HardDriveRegular,
   InfoRegular,
   MusicNote1Regular,
-  BookRegular,
   ChatRegular,
   TimerRegular,
   SettingsRegular,
@@ -86,6 +85,28 @@ export default function App() {
   const [version, setVersion] = useState('')
   const [hasUpdate, setHasUpdate] = useState(false)
 
+  // ── 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）──
+  const [appearance, setAppearance] = useState<any>({
+    accent: 'default',
+    radius: 'standard',
+    font: 'standard',
+    glass: false,
+  })
+
+  // 把外观偏好写到 <html> 的 data-* 上：CSS 变量从这里往下继承，
+  // 组件不用关心，也避免每个页面各自读一遍设置
+  useEffect(() => {
+    const root = document.documentElement
+    if (appearance.accent && appearance.accent !== 'default') {
+      root.setAttribute('data-accent', appearance.accent)
+    } else {
+      root.removeAttribute('data-accent')
+    }
+    root.setAttribute('data-radius', appearance.radius || 'standard')
+    root.setAttribute('data-font', appearance.font || 'standard')
+    root.setAttribute('data-glass', appearance.glass ? 'on' : 'off')
+  }, [appearance])
+
   // ── 密码保护：受保护页面进入前需要解锁 ──
   const [unlockTarget, setUnlockTarget] = useState('')
   const [unlockCode, setUnlockCode] = useState('')
@@ -116,14 +137,16 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [saved, list, info] = await Promise.all([
+        const [saved, list, info, looks] = await Promise.all([
           api.get_theme(),
           api.list_tools(),
           api.get_info(),
+          api.get_appearance(),
         ])
         if (saved) setThemeMode(saved)
         setTools(list)
         setVersion(info.version)
+        if (looks) setAppearance(looks)
       } finally {
         setLoading(false)
         // 首屏数据就绪后再让窗口露面（窗口在 main 里是隐藏创建的）：
@@ -252,8 +275,8 @@ export default function App() {
     { id: 'dashboard', label: '系统状态', icon: <GaugeRegular fontSize={16} /> },
     { id: 'hardware', label: '硬件信息', icon: <HardDriveRegular fontSize={16} /> },
     { id: 'lan', label: '机房管理', icon: <DesktopRegular fontSize={16} /> },
+    // 「课堂」板块已并入「维护」（维护 → 课堂），此处不再单列
     { id: 'maintenance', label: '维护', icon: <ToolboxRegular fontSize={16} /> },
-    { id: 'classroom', label: '课堂', icon: <BookRegular fontSize={16} /> },
     { id: 'chat', label: '临时传输', icon: <ChatRegular fontSize={16} /> },
     { id: 'tasks', label: '定时任务', icon: <TimerRegular fontSize={16} /> },
     { id: 'tools', label: '工具箱', icon: <ToolboxRegular fontSize={16} />, badge: tools.length },
