@@ -64,6 +64,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [diag, setDiag] = useState<any>(null)
   const [startupMode, setStartupMode] = useState('window')
   const [startupMsg, setStartupMsg] = useState('')
+  const [startupAnimation, setStartupAnimation] = useState(true)
   const [autoMsg, setAutoMsg] = useState('')
   const [firewall, setFirewall] = useState<any>(null)
   const [allowPower, setAllowPower] = useState(false)
@@ -137,7 +138,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   useEffect(() => {
     void (async () => {
       try {
-        const [a, o, c, info, dir, mode, storage, power] = await Promise.all([
+        const [a, o, c, info, dir, mode, storage, power, anim] = await Promise.all([
           api.get_autostart(),
           api.get_openwith_registered(),
           api.get_close_to_tray(),
@@ -146,7 +147,9 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           api.get_startup_mode(),
           api.get_storage_info(),
           api.power_control_status(),
+          api.get_startup_animation(),
         ])
+        setStartupAnimation(Boolean(anim))
         setAllowPower(Boolean(power?.allowed))
         try {
           const config = await api.lan_config()
@@ -243,6 +246,17 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
       const result = await api.set_startup_mode(mode)
       setStartupMode(result?.mode ?? mode)
       setStartupMsg(result?.message ?? '')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggleStartupAnimation = async (checked: boolean) => {
+    setBusy(true)
+    try {
+      const ok = await api.set_startup_animation(checked)
+      setStartupAnimation(ok ? checked : startupAnimation)
+      if (!ok) setStartupMsg('启动动画设置保存失败（数据目录不可写）')
     } finally {
       setBusy(false)
     }
@@ -498,6 +512,14 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
                 {startupMsg && <span className="oc-usage-sub">{startupMsg}</span>}
               </div>
             </div>
+            <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
+            <SwitchRow
+              label="启动时播放滑入动画"
+              desc="窗口从屏幕底部居中向上弹出（类似 Win11 开始菜单）；界面加载完成后才出现，看不到白屏与转圈。老旧显卡若觉得卡可以关掉"
+              checked={startupAnimation}
+              disabled={busy}
+              onChange={toggleStartupAnimation}
+            />
             <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
             <SwitchRow
               label="允许远程电源控制"

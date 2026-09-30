@@ -57,6 +57,23 @@ class Api:
     def attach_window(self, window: Any) -> None:
         self._window = window
 
+    def attach_reveal(self, func: Any) -> None:
+        """注入「首屏就绪后显示窗口」的回调（由 main 提供动画实现）。"""
+        self._reveal = func
+
+    def frontend_ready(self) -> dict[str, Any]:
+        """前端首屏渲染完成 —— 此时才让窗口露面。
+
+        窗口在 main 里是以 hidden 创建的：先加载、后显示，
+        用户第一眼看到的就是渲染好的界面（不是白屏，也不是转圈）。
+        """
+        reveal = getattr(self, "_reveal", None)
+        if callable(reveal):
+            import threading
+
+            threading.Thread(target=reveal, daemon=True, name="oc-reveal").start()
+        return {"ok": True}
+
     # ══════════════════════════════════════════════════════
     # 元信息
     # ══════════════════════════════════════════════════════
@@ -923,6 +940,13 @@ class Api:
             "mode": value,
             "message": "已保存（下次启动生效）" if ok else "保存失败（数据目录不可写）",
         }
+
+    def get_startup_animation(self) -> bool:
+        """启动时是否播放「从屏幕底部滑入」的窗口动画（默认开启）。"""
+        return bool(config.get("startup_animation", True))
+
+    def set_startup_animation(self, value: bool) -> bool:
+        return bool(config.set("startup_animation", bool(value)))
 
     def webconsole_firewall(self) -> dict[str, Any]:
         """局域网放行状态（手机控制台 / 临时传输 / 机房协同 / 发现端口）。"""

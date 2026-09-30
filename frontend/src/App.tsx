@@ -126,6 +126,9 @@ export default function App() {
         setVersion(info.version)
       } finally {
         setLoading(false)
+        // 首屏数据就绪后再让窗口露面（窗口在 main 里是隐藏创建的）：
+        // 用户第一眼看到的就是渲染好的界面，而不是白屏和转圈
+        window.setTimeout(() => void api.frontend_ready(), 80)
       }
     })()
   }, [])

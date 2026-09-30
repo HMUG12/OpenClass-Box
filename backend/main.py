@@ -257,6 +257,8 @@ class AppHost:
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu-compositing"
         )
 
+        # hidden=True：先不显示。等前端首屏渲染完成（api.frontend_ready）再露面 ——
+        # 这样用户第一眼看到的就是加载好的界面，而不是先看到白窗口再看到转圈。
         self.window = webview.create_window(
             title=WINDOW_TITLE,
             url=url,
@@ -268,9 +270,12 @@ class AppHost:
             easy_drag=False,  # 仅标题栏 RPC 拖动，避免全窗口拖动导致按钮点不动
             background_color="#1B1A19",
             text_select=False,
+            hidden=True,
         )
         self.api.attach_window(self.window)
+        self.api.attach_reveal(self._reveal_window)
         self.api.tray_available = self.tray.available
+        self._start_hidden = bool(hidden or files)
 
         # 关闭 / Alt+F4 的行为由设置决定：默认最小化到托盘常驻，
         # 用户可在「设置 → 关闭行为」里改为直接退出。
@@ -344,17 +349,9 @@ class AppHost:
             except Exception:
                 pass
 
-        # 静默启动必须有托盘兜底：否则窗口一藏起来，用户就再也打不开了
-        if (hidden and self.tray.available) or files:
-            # 注意：webview.start() 之前窗口尚未就绪，此时直接 hide() 会抛
-            # "Main window failed to start"。改为窗口显示完成后再隐藏。
-            def _hide_after_shown() -> None:
-                try:
-                    self.window.hide()
-                except Exception:
-                    pass
-
-            self.window.events.shown += _hide_after_shown
+        # 窗口何时露面、以什么方式露面，统一交给 _reveal_window()：
+        # 由前端首屏就绪后调用 api.frontend_ready() 触发（见下方方法与 api.py）。
+        # 静默启动时仍需 show() 一次再 hide()，否则托盘会没有可唤起的窗口。
 
         try:
             webview.start(
@@ -366,6 +363,71 @@ class AppHost:
             )
         finally:
             self.tray.stop()
+
+    # ── 窗口露面 ────────────────────────────────────────────
+
+    def _reveal_window(self) -> None:
+        """首屏就绪后让窗口出现（由前端 frontend_ready() 触发，跑在后台线程）。
+
+        两种情形：
+          · 静默启动 / 右键打开文件 → 直接缩到托盘，不打扰用户；
+          · 正常启动 → 从屏幕底部居中向上滑入（像 Win11 开始菜单那样），
+            此时界面已经渲染完毕，用户看不到白屏与转圈。
+        任何一步失败都退化为「直接显示」，保证窗口一定能出来。
+        """
+        window = self.window
+        if window is None:
+            return
+
+        if getattr(self, "_start_hidden", False):
+            try:
+                window.show()
+                if self.tray.available:
+                    window.hide()
+            except Exception:
+                pass
+            return
+
+        animate = True
+        try:
+            from .core.config import config
+
+            animate = bool(config.get("startup_animation", True))
+        except Exception:
+            animate = True
+
+        if not animate:
+            try:
+                window.show()
+            except Exception:
+                pass
+            return
+
+        try:
+            import ctypes
+            import time as _time
+
+            user32 = ctypes.windll.user32
+            screen_w = int(user32.GetSystemMetrics(0))
+            screen_h = int(user32.GetSystemMetrics(1))
+            width, height = WINDOW_SIZE
+            x = max((screen_w - width) // 2, 0)
+            end_y = max((screen_h - height) // 2 - 24, 0)
+            start_y = max(screen_h - 32, end_y + 40)
+
+            window.move(x, start_y)
+            window.show()
+            steps = 16
+            for step in range(1, steps + 1):
+                eased = 1 - (1 - step / steps) ** 3   # easeOutCubic：起步快、收尾柔
+                window.move(x, int(start_y + (end_y - start_y) * eased))
+                _time.sleep(0.011)
+            window.move(x, end_y)
+        except Exception:
+            try:
+                window.show()
+            except Exception:
+                pass
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
