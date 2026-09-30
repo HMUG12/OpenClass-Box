@@ -642,6 +642,72 @@ class Api:
 
         return set_index_url(url)
 
+    # ══════════════════════════════════════════════════════
+    # A 端远程管理服务（配合内网穿透 → Web 管理端）
+    # ══════════════════════════════════════════════════════
+
+    def remote_admin_status(self) -> dict[str, Any]:
+        """远程管理状态（运行中 / 访问地址 / 是否已设访问码 / 最近操作）。"""
+        from .core.remote_admin import status
+
+        return status()
+
+    def remote_admin_start(self, port: int = 0, allow_public: bool | None = None) -> dict[str, Any]:
+        from .core.remote_admin import start
+
+        return start(port, allow_public)
+
+    def remote_admin_stop(self) -> dict[str, Any]:
+        from .core.remote_admin import stop
+
+        return stop()
+
+    def remote_admin_set_code(self, code: str) -> dict[str, Any]:
+        """设置远程管理访问码（至少 8 位，不提供默认码）。"""
+        from .core.remote_admin import set_code
+
+        return set_code(code)
+
+    def remote_admin_set_allow_public(self, value: bool) -> dict[str, Any]:
+        from .core.remote_admin import set_allow_public
+
+        return set_allow_public(value)
+
+    def remote_admin_audit(self, n: int = 100) -> list[dict[str, Any]]:
+        from .core.remote_admin import audit
+
+        return audit(n)
+
+    # ── 内网穿透套件 ──────────────────────────────────────
+
+    def tunnel_status(self) -> dict[str, Any]:
+        """穿透状态：方案 / 公网地址 / 输出 / 可执行文件是否就绪。"""
+        from .core.tunnel import status
+
+        return status()
+
+    def tunnel_save(self, provider: str, fields: dict[str, Any] | None = None) -> dict[str, Any]:
+        from .core.tunnel import save_settings
+
+        return save_settings(provider, fields)
+
+    def tunnel_start(
+        self, port: int = 0, provider: str = "", fields: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """启动穿透（默认把远程管理端口暴露出去）。"""
+        from .core.remote_admin import DEFAULT_PORT, status as remote_status
+        from .core.tunnel import start
+
+        target = int(port or 0)
+        if not target:
+            target = int((remote_status() or {}).get("port") or DEFAULT_PORT)
+        return start(target, provider, fields)
+
+    def tunnel_stop(self) -> dict[str, Any]:
+        from .core.tunnel import stop
+
+        return stop()
+
     def pick_profile_file(self) -> dict[str, Any]:
         """弹出文件选择框选择 .ocbprofile。"""
         if self._window is None:

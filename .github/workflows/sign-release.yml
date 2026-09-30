@@ -1,0 +1,111 @@
+name: Sign Release Artifacts
+
+# 对已发布的安装包做 sigstore 无密钥签名（keyless signing）。
+#
+# 为什么这样做：
+#   · 发布包体积很大（B 端约 430 MB）且内含第三方组件（OpenOffice / VLC / mpv），
+#     不适合在 CI 里从零重建，因此签名对象是「已发布的那一个字节流」；
+#   · sigstore keyless 不需要自备证书：签名时用 GitHub 的 OIDC 身份换取
+#     短期证书，签名与证书一起写进 Rekor 透明日志 —— 任何人都能验证
+#     「这个文件确实来自本仓库的这个 workflow」；
+#   · 生成 .sigstore.json 会随 Release 一起发布，用户可用一条命令验证。
+#
+# 与 SignPath Foundation 的关系见 SIGNING.md：SignPath 提供 Windows
+# Authenticode 代码签名（消除 SmartScreen 警告），sigtore 提供供应链证明，
+# 两者互补，本 workflow 负责后者。
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要签名的 Release tag（留空则取最新一个）
+        required: false
+        type: string
+
+permissions:
+  contents: write # 需要回传签名文件到 Release
+  id-token: write # sigstore keyless 必需（换取 OIDC 身份）
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析目标版本
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG:-$EVENT_TAG}"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --json tagName -q .tagName)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "将签名 Release：$TAG"
+
+      - name: 下载 Release 里的安装包
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          mkdir -p artifacts
+          gh release download "$TAG" --pattern '*.exe' --dir artifacts --clobber
+          ls -lh artifacts
+
+      - name: 生成校验值清单
+        working-directory: artifacts
+        run: |
+          sha256sum *.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: sigstore 无密钥签名
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: |
+            artifacts/*.exe
+          # 额外校验：签名后立即用 sigstore 自己的验证器验一遍
+          verify: true
+
+      - name: 写一份验证说明
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          {
+            echo "# 验证说明（$TAG）"
+            echo
+            echo "本 Release 中的安装包已用 sigstore 无密钥签名，签名与证书见同目录 *.sigstore.json。"
+            echo
+            echo "## 校验文件完整性"
+            echo '```bash'
+            echo "sha256sum -c SHA256SUMS.txt"
+            echo '```'
+            echo
+            echo "## 验证签名来源"
+            echo '```bash'
+            echo "pip install sigstore"
+            echo "sigstore verify identity \\"
+            echo "  --cert-identity 'https://github.com/HMUG12/OpenClass-Box/.github/workflows/sign-release.yml@refs/heads/main' \\"
+            echo "  --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \\"
+            echo "  --bundle OpenClass-Box-B_Setup.exe.sigstore.json \\"
+            echo "  OpenClass-Box-B_Setup.exe"
+            echo '```'
+            echo
+            echo "验证通过即表示：该文件由本仓库的 GitHub Actions 构建流程签名，且签名已记入 Rekor 透明日志。"
+          } > artifacts/VERIFY.md
+          cat artifacts/VERIFY.md
+
+      - name: 回传签名与清单到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          gh release upload "$TAG" \
+            artifacts/*.sigstore.json \
+            artifacts/SHA256SUMS.txt \
+            artifacts/VERIFY.md \
+            --clobber

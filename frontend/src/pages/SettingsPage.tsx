@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Switch, Spinner } from '@fluentui/react-components'
+import RemotePanel from '../components/RemotePanel'
 import { DesktopRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
 import { api } from '../api'
 import type { ThemeMode } from '../types'
@@ -845,6 +846,8 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           忘记密码：删除数据目录下的 passcode.json 即可复位（删除前请确认是本人操作）。
         </div>
       </div>
+
+      <RemotePanel />
 
       <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
         插件索引

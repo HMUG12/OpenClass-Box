@@ -96,6 +96,16 @@ export interface OcApi {
   market_uninstall(pluginId: string): Promise<any>
   market_index_url(): Promise<any>
   market_set_index_url(url: string): Promise<any>
+  remote_admin_status(): Promise<any>
+  remote_admin_start(port?: number, allowPublic?: boolean): Promise<any>
+  remote_admin_stop(): Promise<any>
+  remote_admin_set_code(code: string): Promise<any>
+  remote_admin_set_allow_public(value: boolean): Promise<any>
+  remote_admin_audit(n?: number): Promise<any[]>
+  tunnel_status(): Promise<any>
+  tunnel_save(provider: string, fields?: Record<string, string>): Promise<any>
+  tunnel_start(port?: number, provider?: string, fields?: Record<string, string>): Promise<any>
+  tunnel_stop(): Promise<any>
   app_log_tail(lines?: number): Promise<any>
   app_log_clear(): Promise<any>
   open_log_folder(): Promise<boolean>
@@ -361,6 +371,42 @@ const MOCK_API: OcApi = {
   async market_uninstall() { return { ok: false, message: '开发预览模式' } },
   async market_index_url() { return { url: '', default: '' } },
   async market_set_index_url() { return { ok: false, message: '开发预览模式' } },
+  async remote_admin_status() {
+    return {
+      running: false,
+      port: 38630,
+      url: '',
+      localUrl: '',
+      hasCode: false,
+      allowPublic: false,
+      minCodeLen: 8,
+      sessions: 0,
+      safeTest: false,
+      audit: [],
+      powerAllowed: false,
+    }
+  },
+  async remote_admin_start() { return { ok: false, message: '开发预览模式：无法启动远程管理' } },
+  async remote_admin_stop() { return { ok: true, message: '开发预览模式' } },
+  async remote_admin_set_code() { return { ok: false, message: '开发预览模式' } },
+  async remote_admin_set_allow_public() { return { ok: false, message: '开发预览模式' } },
+  async remote_admin_audit() { return [] },
+  async tunnel_status() {
+    return {
+      running: false,
+      provider: 'cloudflared',
+      providerName: 'Cloudflare Tunnel',
+      url: '',
+      exeReady: false,
+      output: [],
+      message: '',
+      settings: {},
+      providers: [],
+    }
+  },
+  async tunnel_save() { return { ok: false, message: '开发预览模式' } },
+  async tunnel_start() { return { ok: false, message: '开发预览模式：无法启动穿透' } },
+  async tunnel_stop() { return { ok: true, message: '开发预览模式' } },
   async app_log_tail() { return { text: '', path: '', dir: '', size: 0, exists: false } },
   async app_log_clear() { return { ok: true, message: '开发预览模式' } },
   async open_log_folder() { return false },
