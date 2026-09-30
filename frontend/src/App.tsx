@@ -91,6 +91,27 @@ export default function App() {
   const [unlockCode, setUnlockCode] = useState('')
   const [unlockMsg, setUnlockMsg] = useState('')
 
+  // 「立即上锁」（设置页触发）后立刻重新校验当前页：当场显示锁定界面，
+  // 不用等用户切页才发现被锁
+  useEffect(() => {
+    const handler = () => {
+      void (async () => {
+        try {
+          const check = await api.passcode_check(page)
+          if (check?.need) {
+            setUnlockTarget(page)
+            setUnlockCode('')
+            setUnlockMsg('')
+          }
+        } catch {
+          /* 查询失败时按未锁处理，避免误挡正常使用 */
+        }
+      })()
+    }
+    window.addEventListener('oc-passcode-locked', handler)
+    return () => window.removeEventListener('oc-passcode-locked', handler)
+  }, [page])
+
   // ── 初始加载 ──
   useEffect(() => {
     void (async () => {
@@ -306,7 +327,51 @@ export default function App() {
             </div>
           )}
 
-          {loading ? (
+          {unlockTarget ? (
+            /* 锁定界面就显示在内容区里（不是盖住整个窗口的浮层）：
+               侧栏仍可切换，切到未保护页面照常使用 */
+            <div className="oc-unlock-wrap">
+              <div className="oc-panel oc-unlock-card">
+                <div className="oc-panel-title">需要密码</div>
+                <div className="oc-hint" style={{ marginBottom: 10 }}>
+                  「{PAGE_LABEL[unlockTarget] ?? unlockTarget}」受密码保护，输入密码后进入。
+                </div>
+                <Input
+                  type="password"
+                  value={unlockCode}
+                  onChange={(_e, data) => setUnlockCode(data.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void tryUnlock()
+                  }}
+                  placeholder="请输入密码"
+                  autoFocus
+                  style={{ width: '100%' }}
+                />
+                {unlockMsg && (
+                  <div className="oc-list-warn" style={{ marginTop: 8 }}>
+                    {unlockMsg}
+                  </div>
+                )}
+                <div className="oc-actions" style={{ marginTop: 12 }}>
+                  <Button appearance="primary" onClick={() => void tryUnlock()}>
+                    解锁
+                  </Button>
+                  <Button
+                    appearance="secondary"
+                    onClick={() => {
+                      setUnlockTarget('')
+                      setUnlockMsg('')
+                    }}
+                  >
+                    返回
+                  </Button>
+                </div>
+                <div className="oc-hint" style={{ marginTop: 8 }}>
+                  忘记密码：删除数据目录下的 passcode.json 即可复位（设置 → 存储位置可看到路径）。
+                </div>
+              </div>
+            </div>
+          ) : loading ? (
             <div className="oc-empty">
               <Spinner size="medium" label="正在加载…" />
             </div>
@@ -317,60 +382,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* 密码保护：受保护页面的解锁窗口 */}
-      {unlockTarget && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 50,
-          }}
-        >
-          <div className="oc-panel" style={{ width: 340, margin: 0 }}>
-            <div className="oc-panel-title">需要密码</div>
-            <div className="oc-hint" style={{ marginBottom: 10 }}>
-              「{PAGE_LABEL[unlockTarget] ?? unlockTarget}」受密码保护，输入密码后进入。
-            </div>
-            <Input
-              type="password"
-              value={unlockCode}
-              onChange={(_e, data) => setUnlockCode(data.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void tryUnlock()
-              }}
-              placeholder="请输入密码"
-              autoFocus
-              style={{ width: '100%' }}
-            />
-            {unlockMsg && (
-              <div className="oc-list-warn" style={{ marginTop: 8 }}>
-                {unlockMsg}
-              </div>
-            )}
-            <div className="oc-actions" style={{ marginTop: 12 }}>
-              <Button appearance="primary" onClick={() => void tryUnlock()}>
-                解锁
-              </Button>
-              <Button
-                appearance="secondary"
-                onClick={() => {
-                  setUnlockTarget('')
-                  setUnlockMsg('')
-                }}
-              >
-                取消
-              </Button>
-            </div>
-            <div className="oc-hint" style={{ marginTop: 8 }}>
-              忘记密码：删除数据目录下的 passcode.json 即可复位（设置 → 存储位置可看到路径）。
-            </div>
-          </div>
-        </div>
-      )}
     </FluentProvider>
   )
 }

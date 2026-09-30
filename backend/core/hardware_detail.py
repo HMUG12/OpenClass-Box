@@ -29,6 +29,32 @@ _GPU_CLASS_GUID = (
     r"\{4d36e968-e325-11ce-bfc1-08002be10318}"
 )
 
+# 虚拟显示适配器：远程桌面 / 投屏 / 安卓模拟器都会装一张。
+# 它们不是真实显卡，列在「硬件信息」里只会让老师困惑，故过滤掉。
+# 注意：「Microsoft Basic Display Adapter」是没装驱动时的兜底适配器，
+# 必须**保留** —— 它出现就说明显卡驱动缺失，是有用的诊断信号。
+_VIRTUAL_GPU_HINTS = (
+    "virtual display",
+    "virtual adapter",
+    "indirect display",
+    "idd device",
+    "todesk",
+    "gameviewer",
+    "sunlogin",
+    "向日葵",
+    "parsec",
+    "mumu",
+    "nemu",
+    "ldplayer",
+    "nox",
+    "bluestacks",
+)
+
+
+def _is_virtual_gpu(name: str) -> bool:
+    lowered = (name or "").lower()
+    return any(hint in lowered for hint in _VIRTUAL_GPU_HINTS)
+
 # 基础信息（GPU / 主板 / BIOS / 内存条）—— 相对快
 _BASE_SCRIPT = r"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -136,19 +162,24 @@ def _json(script: str, timeout: float = 25) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def gpu_vram_from_registry() -> dict[str, int]:
-    """读取每张显卡的真实显存（字节），键为显卡描述名。
+def gpu_list_from_registry() -> list[dict[str, Any]]:
+    """注册表里登记的全部显卡：名称 + 显存（读不到时为 None）。
 
-    这是唯一能正确反映 4GB 以上显存的可靠来源；AdapterRAM 会截断。
+    为什么按 DriverDesc 列卡，而不是「显存读到才算一张卡」：
+    核显（Intel / AMD 集显）共享系统内存，注册表里**没有**
+    HardwareInformation.qwMemorySize 这个值。旧实现只收录显存 > 0 的卡，
+    结果「核显 + 独显」的机器上核显直接消失，用户以为识别不到核显。
+    现在每张登记的显卡都会列出，显存读得到就带上，读不到就留空。
     """
-    result: dict[str, int] = {}
+    items: list[dict[str, Any]] = []
     if platform.system() != "Windows":
-        return result
+        return items
     try:
         import winreg
     except ImportError:
-        return result
+        return items
 
+    seen: set[str] = set()
     try:
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _GPU_CLASS_GUID) as root:
             index = 0
@@ -162,24 +193,45 @@ def gpu_vram_from_registry() -> dict[str, int]:
                     continue
                 try:
                     with winreg.OpenKey(root, sub) as key:
-                        desc = str(winreg.QueryValueEx(key, "DriverDesc")[0])
-                        size = 0
+                        desc = str(winreg.QueryValueEx(key, "DriverDesc")[0]).strip()
+                        if not desc or desc in seen:
+                            continue
+                        size: int | None = None
                         for value_name in (
                             "HardwareInformation.qwMemorySize",
                             "HardwareInformation.MemorySize",
                         ):
                             try:
-                                size = int(winreg.QueryValueEx(key, value_name)[0])
-                                break
+                                value = int(winreg.QueryValueEx(key, value_name)[0])
                             except OSError:
                                 continue
-                        if size > 0:
-                            result[desc] = max(result.get(desc, 0), size)
+                            if value > 0:
+                                size = value
+                                break
+                        seen.add(desc)
+                        items.append({"name": desc, "memoryBytes": size})
                 except OSError:
                     continue
     except OSError:
         pass
-    return result
+
+    # 过滤虚拟显示适配器；万一过滤后什么都不剩（极端环境），就保留原列表，
+    # 宁可多显示也不显示成「没有显卡」
+    physical = [item for item in items if not _is_virtual_gpu(item["name"])]
+    return physical or items
+
+
+def gpu_vram_from_registry() -> dict[str, int]:
+    """每张显卡的真实显存（字节），键为显卡描述名；只含读得到显存的卡。
+
+    显存以此为准：Win32_VideoController.AdapterRAM 是 32 位字段，
+    8 GB 显卡会被截断成 4 GB。
+    """
+    return {
+        item["name"]: int(item["memoryBytes"])
+        for item in gpu_list_from_registry()
+        if item.get("memoryBytes")
+    }
 
 
 # ══════════════════════════════════════════════════════════════
@@ -192,14 +244,20 @@ _full_started = False
 
 
 def _quick_snapshot() -> dict[str, Any]:
-    """秒级快照：仅注册表显存（慢查询一律留空）。"""
+    """秒级快照：仅注册表（慢查询一律留空）。
+
+    显卡列出注册表登记的全部适配器（含核显），显存读不到时为 None，
+    前端显示「共享内存」而不是干脆不显示这张卡。
+    """
     gpus: list[dict[str, Any]] = []
     try:
-        for name, size in gpu_vram_from_registry().items():
+        for item in gpu_list_from_registry():
+            size = item.get("memoryBytes")
             gpus.append(
                 {
-                    "name": name,
-                    "memoryGB": round(size / (1024 ** 3), 1),
+                    "name": item["name"],
+                    "memoryGB": round(size / (1024 ** 3), 1) if size else None,
+                    "shared": not bool(size),
                     "driverVersion": "",
                     "driverDate": "",
                     "resolution": "",

@@ -812,6 +812,22 @@ body {
   text-decoration: underline;
 }
 
+/* 内容区内的锁定界面（只占据内容区，不盖住侧栏与整个窗口） */
+.oc-unlock-wrap {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 56px 24px;
+  overflow: auto;
+}
+
+.oc-unlock-card {
+  width: 380px;
+  max-width: 100%;
+  margin: 0;
+}
+
 /* ── 信息表（关于页 / 硬件页共用） ── */
 
 .oc-info-grid {

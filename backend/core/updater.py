@@ -95,21 +95,66 @@ def _open(request: urllib.request.Request, timeout: float = _TIMEOUT):
     return opener.open(request, timeout=timeout)
 
 
-def _query_latest(repo: str) -> dict[str, str] | None:
-    """查询仓库的最新 release；失败返回 None。"""
+def _query_latest_ex(
+    repo: str, include_prerelease: bool = False
+) -> tuple[dict[str, str] | None, str]:
+    """查询仓库的最新 release，返回 (信息, 失败原因)。
+
+    include_prerelease=True 时用 /releases 列表并取最近一个（含预发布）。
+    本软件自身必须用这个模式：项目发的全是 Beta 预发布版，而 GitHub 的
+    /releases/latest 会**跳过预发布**，导致更新检测永远看不到新版本、
+    却把很久以前的正式 tag 当成"最新"。
+
+    带上失败原因是必要的：设置页要能把「限流 / 没有 release / 连不上」
+    分开告诉用户，否则永远只有一句「联网失败」，无法判断该等一会儿
+    还是该找网络管理员。
+    """
     if not repo:
-        return None
-    url = f"https://api.github.com/repos/{repo}/releases/latest"
+        return None, "未配置仓库"
+    url = (
+        f"https://api.github.com/repos/{repo}/releases?per_page=10"
+        if include_prerelease
+        else f"https://api.github.com/repos/{repo}/releases/latest"
+    )
     try:
         with _open(urllib.request.Request(url, headers=_HEADERS)) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-    except (OSError, urllib.error.URLError, ValueError):
-        return None
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None, "仓库还没有发布 Release"
+        if exc.code in (403, 429):
+            return None, "GitHub 接口限流或访问受限（稍后重试）"
+        return None, f"HTTP {exc.code}"
+    except ValueError:
+        return None, "返回内容无法解析"
+    except Exception as exc:  # noqa: BLE001 —— 交给统一分类翻译成人话
+        from .net_util import classify_error
+
+        return None, classify_error(exc)
+
+    if include_prerelease:
+        for item in data if isinstance(data, list) else []:
+            if not isinstance(item, dict) or item.get("draft"):
+                continue
+            return {
+                "latest": str(item.get("tag_name") or ""),
+                "url": str(item.get("html_url") or ""),
+                "publishedAt": str(item.get("published_at") or ""),
+                "prerelease": bool(item.get("prerelease")),
+            }, ""
+        return None, "仓库还没有发布 Release"
+
     return {
         "latest": str(data.get("tag_name") or ""),
         "url": str(data.get("html_url") or ""),
         "publishedAt": str(data.get("published_at") or ""),
-    }
+    }, ""
+
+
+def _query_latest(repo: str) -> dict[str, str] | None:
+    """查询仓库的最新 release（不含预发布）；失败返回 None。"""
+    info, _ = _query_latest_ex(repo)
+    return info
 
 
 def _version_tuple(value: str) -> tuple[int, ...]:
@@ -173,7 +218,8 @@ def check_self_update() -> dict[str, Any]:
     """
     current = _current_version()
     fallback_url = f"https://github.com/{SELF_REPO}/releases"
-    info = _query_latest(SELF_REPO)
+    # 自身检测必须包含预发布：本项目发布的都是 Beta，/latest 会跳过它们
+    info, error = _query_latest_ex(SELF_REPO, include_prerelease=True)
     if info is None or not info["latest"]:
         return {
             "ok": False,
@@ -182,7 +228,8 @@ def check_self_update() -> dict[str, Any]:
             "hasUpdate": False,
             "url": fallback_url,
             "publishedAt": "",
-            "message": "未能获取版本信息（可能未联网或访问受限）",
+            "reason": error,
+            "message": f"未能获取版本信息：{error}" if error else "未能获取版本信息（可能未联网）",
         }
 
     latest = info["latest"].lstrip("vV")

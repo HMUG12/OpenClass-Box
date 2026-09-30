@@ -214,7 +214,16 @@ export default function HardwarePage() {
                     key={index}
                   >
                     <Row label="型号" value={gpu.name} />
-                    <Row label="显存" value={gpu.memoryGB ? `${gpu.memoryGB} GB` : '不可用'} />
+                    <Row
+                      label="显存"
+                      value={
+                        gpu.memoryGB
+                          ? `${gpu.memoryGB} GB`
+                          : gpu.shared
+                            ? '共享系统内存（核显，无独立显存）'
+                            : '不可用'
+                      }
+                    />
                     <Row label="驱动版本" value={gpu.driverVersion} />
                     <Row label="驱动日期" value={gpu.driverDate} />
                     <Row label="分辨率" value={gpu.resolution} />

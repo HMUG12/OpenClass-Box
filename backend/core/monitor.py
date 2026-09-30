@@ -196,23 +196,35 @@ def _parse_ipconfig() -> dict[str, Any]:
 
 
 def query_public_ip() -> dict[str, Any]:
-    """查询公网出口 IP。离线或全部源失败时返回 reachable=False。"""
-    import requests
+    """查询公网出口 IP。
 
+    走统一网络层（跟随系统代理），失败时给出**可读原因**——
+    「未获取到」和「为什么没获取到」对老师是两回事：
+    前者只能干瞪眼，后者能判断该不该找网络管理员。
+    """
+    from .net_util import http_get_json, proxy_note
+
+    last_error = ""
     for url, extractor in _PUBLIC_IP_SOURCES:
-        try:
-            resp = requests.get(url, timeout=PUBLIC_IP_TIMEOUT)
-            resp.raise_for_status()
-            if url.endswith(".php"):
-                data = resp.json()
-            else:
-                data = resp.json()
-            ip = extractor(data) if isinstance(data, dict) else None
-            if ip:
-                return {"ip": str(ip).strip(), "source": url.split("/")[2], "reachable": True}
-        except Exception:
+        ok, data, error = http_get_json(url, timeout=PUBLIC_IP_TIMEOUT)
+        if not ok:
+            last_error = error
             continue
-    return {"ip": None, "source": None, "reachable": False}
+        ip = extractor(data) if isinstance(data, dict) else None
+        if ip:
+            return {
+                "ip": str(ip).strip(),
+                "source": url.split("/")[2],
+                "reachable": True,
+                "proxy": proxy_note(),
+            }
+    return {
+        "ip": None,
+        "source": None,
+        "reachable": False,
+        "reason": last_error or "所有查询源都没有返回结果",
+        "proxy": proxy_note(),
+    }
 
 
 def local_ip() -> str | None:
@@ -430,20 +442,22 @@ class SystemMonitor:
                 }
             )
 
-        # 显卡：先用注册表取真实显存（秒级，且不会被 4GB 截断），
-        # 名称 / 驱动等由后台 WMI 查询补齐（见 _fill_wmi_aux）
+        # 显卡：注册表登记的全部适配器（含核显）秒级列出，显存取注册表真值
+        # （不被 4GB 截断）；驱动 / 分辨率由后台 WMI 查询补齐（见 _fill_wmi_aux）
         gpus: list[dict[str, Any]] = []
         try:
-            from .hardware_detail import gpu_vram_from_registry
+            from .hardware_detail import gpu_list_from_registry
 
-            for gpu_name, size in gpu_vram_from_registry().items():
+            for item in gpu_list_from_registry():
+                size = item.get("memoryBytes")
                 gpus.append(
                     {
-                        "name": gpu_name,
-                        "memoryGB": round(size / (1024 ** 3), 1),
+                        "name": item["name"],
+                        "memoryGB": round(size / (1024 ** 3), 1) if size else 0,
+                        "shared": not bool(size),
                         "driverVersion": "",
                         "resolution": "",
-                        "memorySource": "registry",
+                        "memorySource": "registry" if size else "shared",
                     }
                 )
         except Exception:
@@ -516,12 +530,24 @@ class SystemMonitor:
                 if not isinstance(gpu_item, dict):
                     continue
                 gpu_name = str(gpu_item.get("name") or "")
+                if not gpu_name:
+                    continue
                 memory = float(gpu_item.get("memoryGB") or 0) * (1024 ** 3)
                 if gpu_name in vram and vram[gpu_name] > memory:
                     gpu_item = {
                         **gpu_item,
                         "memoryGB": round(vram[gpu_name] / (1024 ** 3), 1),
+                        "shared": False,
                         "memorySource": "registry",
+                    }
+                else:
+                    # WMI 的 AdapterRAM 对核显常为 0 或被截断：显存读不到就标记为
+                    # 共享内存，前端据此显示「共享内存」而不是「0 GB」
+                    gpu_item = {
+                        **gpu_item,
+                        "memoryGB": float(gpu_item.get("memoryGB") or 0),
+                        "shared": not bool(gpu_item.get("memoryGB")),
+                        "memorySource": "wmi",
                     }
                 merged[gpu_name] = gpu_item
 

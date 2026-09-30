@@ -1344,8 +1344,7 @@ class Api:
         return bool(config.get("close_to_tray", True))
 
     def set_close_to_tray(self, value: bool) -> bool:
-        config.set("close_to_tray", bool(value))
-        return True
+        return bool(config.set("close_to_tray", bool(value)))
 
     def launch_tool(self, tool_id: str, file_path: str | None = None) -> dict[str, Any]:
         spec = registry.get(tool_id)
@@ -1452,8 +1451,12 @@ class Api:
     def set_theme(self, mode: str) -> bool:
         if mode not in _VALID_THEMES:
             return False
-        config.set("theme", mode)
-        return True
+        # 如实返回落盘结果：写不进去时必须让界面知道，而不是显示"已保存"
+        return bool(config.set("theme", mode))
+
+    def config_diag(self) -> dict[str, Any]:
+        """配置存储诊断（文件位置 / 上次保存结果 / 是否回退过）。"""
+        return config.diag()
 
     def open_url(self, url: str) -> bool:
         try:

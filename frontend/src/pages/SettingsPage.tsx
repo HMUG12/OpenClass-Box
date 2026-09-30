@@ -61,8 +61,10 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
 
   const [dataDir, setDataDir] = useState('')
   const [storage, setStorage] = useState<any>(null)
+  const [diag, setDiag] = useState<any>(null)
   const [startupMode, setStartupMode] = useState('window')
   const [startupMsg, setStartupMsg] = useState('')
+  const [autoMsg, setAutoMsg] = useState('')
   const [firewall, setFirewall] = useState<any>(null)
   const [allowPower, setAllowPower] = useState(false)
 
@@ -171,6 +173,11 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         setDataDir(dir)
         setStartupMode(mode ?? 'window')
         setStorage(storage ?? null)
+        try {
+          setDiag(await api.config_diag())
+        } catch {
+          /* 开发预览模式忽略 */
+        }
       } catch {
         // 忽略：开发模式下拿不到真实值
       } finally {
@@ -204,9 +211,17 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
 
   const toggleAutostart = async (checked: boolean) => {
     setBusy(true)
+    setAutoMsg('')
     try {
       const ok = await api.set_autostart(checked)
-      setAutostart(ok ? checked : autostart)
+      if (ok) {
+        setAutostart(checked)
+        setAutoMsg(checked ? '已开启开机自启' : '已关闭开机自启')
+      } else {
+        setAutoMsg('设置失败：注册表写入被拒绝（常见原因是安全软件拦截，可稍后重试）')
+      }
+    } catch (error) {
+      setAutoMsg(`设置失败：${error}`)
     } finally {
       setBusy(false)
     }
@@ -439,11 +454,16 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           <>
             <SwitchRow
               label="开机自启"
-              desc="登录 Windows 后自动在后台运行（仅当前用户）"
+              desc="登录 Windows 后自动运行（仅当前用户）；显示界面还是缩到托盘，由下面的「启动时的窗口行为」决定"
               checked={autostart}
               disabled={busy}
               onChange={toggleAutostart}
             />
+            {autoMsg && (
+              <div className="oc-usage-sub" style={{ paddingBottom: 6 }}>
+                {autoMsg}
+              </div>
+            )}
             <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
             <SwitchRow
               label="关闭时最小化到托盘"
@@ -742,6 +762,8 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
                   const result = await api.passcode_lock()
                   setPcMsg(result?.message ?? '')
                   await loadPc()
+                  // 通知主界面：当前页若受保护，立刻切换到锁定界面（不用等切页）
+                  window.dispatchEvent(new Event('oc-passcode-locked'))
                 }}
               >
                 立即重新上锁
@@ -876,6 +898,17 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
                 前往下载
               </Button>
             )}
+            {!updateBusy && selfUpdate && selfUpdate.ok === false && (
+              <Button
+                size="small"
+                appearance="secondary"
+                onClick={() =>
+                  void api.open_url('https://github.com/HMUG12/OpenClass-Box/releases')
+                }
+              >
+                手动打开发布页
+              </Button>
+            )}
           </div>
         </div>
 
@@ -932,6 +965,24 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
               <span className="oc-mono">{storage.configFile}</span>
             </div>
           </>
+        )}
+        {diag && (
+          <div className="oc-info-row">
+            <span>最近一次保存</span>
+            <span>
+              {diag.lastSaveAt
+                ? `${new Date(diag.lastSaveAt * 1000).toLocaleString()} · ${
+                    diag.savedOk ? '成功' : '失败'
+                  }`
+                : '本次启动后还没有保存过设置'}
+              {diag.fallback ? ` · 已自动改用备用位置` : ''}
+            </span>
+          </div>
+        )}
+        {diag && diag.savedOk === false && diag.lastError && (
+          <div className="oc-list-warn" style={{ marginTop: 6 }}>
+            上一次保存失败：{diag.lastError}
+          </div>
         )}
         <div className="oc-hint" style={{ marginTop: 8 }}>
           所有设置会立即写入上面的目录。若程序安装在 Program Files 这类受保护位置，

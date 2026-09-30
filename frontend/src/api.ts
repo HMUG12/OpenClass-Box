@@ -100,6 +100,7 @@ export interface OcApi {
   app_log_clear(): Promise<any>
   open_log_folder(): Promise<boolean>
   get_storage_info(): Promise<any>
+  config_diag(): Promise<any>
   report_frontend_error(message: string): Promise<any>
   get_startup_mode(): Promise<string>
   set_startup_mode(mode: string): Promise<any>
@@ -362,6 +363,9 @@ const MOCK_API: OcApi = {
   async open_log_folder() { return false },
   async get_storage_info() {
     return { dataDir: '-', appRoot: '-', configFile: '-', portable: false, frozen: false, writable: true, migratedFrom: '' }
+  },
+  async config_diag() {
+    return { path: '-', savedOk: true, lastSaveAt: 0, lastError: '', fallback: '', keyCount: 0 }
   },
   async report_frontend_error() { return { ok: true } },
   async get_startup_mode() { return 'window' },

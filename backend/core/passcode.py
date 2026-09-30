@@ -193,7 +193,15 @@ def clear(current: str) -> dict[str, Any]:
     if not hmac.compare_digest(_hash(current or "", str(data.get("salt") or "")), str(data.get("hash"))):
         _note_fail()
         return {"ok": False, "message": "密码不正确"}
-    payload = {"enabled": False, "protected": []}
+    # 必须把散列与盐一起清掉：只把 enabled 置 False 会留下「密码还写着」的
+    # 错觉，手工看文件或换个版本的界面读都会以为没关干净
+    payload = {
+        "enabled": False,
+        "protected": [],
+        "salt": "",
+        "hash": "",
+        "updatedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
     if not _write(payload):
         return {"ok": False, "message": "保存失败"}
     with _lock:

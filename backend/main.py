@@ -374,6 +374,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--debug", action="store_true", help="开启 WebView 调试")
     parser.add_argument("--hidden", action="store_true", help="启动后仅驻留系统托盘")
     parser.add_argument(
+        "--autostart",
+        action="store_true",
+        help="由开机自启拉起（是否静默仍由「启动时的窗口行为」设置决定）",
+    )
+    parser.add_argument(
         "--role",
         choices=("auto", "a", "b"),
         default="auto",
@@ -422,6 +427,16 @@ def main(argv: list[str] | None = None) -> int:
             hidden = str(config.get("startup_mode", "window")).lower() == "silent"
         except Exception:
             hidden = False
+
+    # 修正历史遗留：旧版本写入注册表的自启命令带 --hidden，会让「显示界面」
+    # 设置失效。这里开机自启拉起时顺势重写一次（只在命令不符时才会真写注册表）。
+    if args.autostart:
+        try:
+            from .system.autostart import repair_autostart
+
+            repair_autostart()
+        except Exception:
+            pass
 
     try:
         AppHost().run(
