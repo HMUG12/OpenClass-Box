@@ -5,6 +5,7 @@ import HealthPage from './HealthPage'
 import DiagnosticsPage from './DiagnosticsPage'
 import TermPanel from '../components/TermPanel'
 import ClassroomPage from './ClassroomPage'
+import HealthWatchPanel from '../components/HealthWatchPanel'
 
 function formatSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B'
@@ -439,7 +440,7 @@ function PortablePanel() {
   )
 }
 
-type Tab = 'classroom' | 'checkup' | 'repair' | 'diagnostics' | 'term' | 'portable'
+type Tab = 'classroom' | 'checkup' | 'checklist' | 'repair' | 'diagnostics' | 'term' | 'portable'
 
 export default function MaintenancePage() {
   const [tab, setTab] = useState<Tab>('checkup')
@@ -464,6 +465,12 @@ export default function MaintenancePage() {
             onClick={() => setTab('checkup')}
           >
             一键体检
+          </Button>
+          <Button
+            appearance={tab === 'checklist' ? 'primary' : 'secondary'}
+            onClick={() => setTab('checklist')}
+          >
+            维护清单
           </Button>
           <Button
             appearance={tab === 'repair' ? 'primary' : 'secondary'}
@@ -494,6 +501,7 @@ export default function MaintenancePage() {
 
       {tab === 'classroom' && <ClassroomPage />}
       {tab === 'checkup' && <HealthPage />}
+      {tab === 'checklist' && <HealthWatchPanel />}
       {tab === 'repair' && <RepairPanel />}
       {tab === 'diagnostics' && <DiagnosticsPage />}
       {tab === 'term' && <TermPanel />}

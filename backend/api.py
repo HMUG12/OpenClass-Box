@@ -540,6 +540,26 @@ class Api:
     # 课堂专属工具（投屏 / 触摸 / 教学软件 / 还原环境）
     # ══════════════════════════════════════════════════════
 
+    # ══════════════════════════════════════════════════════
+    # 设备衰退监测与维护清单
+    # ══════════════════════════════════════════════════════
+
+    def health_watch_status(self) -> dict[str, Any]:
+        """上次扫描结果（打开界面就能看到，不必每次重扫）。"""
+        from .core.health_watch import status
+
+        return status()
+
+    @timed("维护清单扫描")
+    def health_watch_scan(self) -> dict[str, Any]:
+        """完整扫描：硬盘可靠性 + 异常关机 / 蓝屏 + 温度 → 维护清单。
+
+        只依据可解释的数值给结论，**不做寿命预测**（见模块文档的说明）。
+        """
+        from .core.health_watch import scan_and_cache
+
+        return scan_and_cache()
+
     @timed("课堂检测")
     def classroom_report(self) -> dict[str, Any]:
         """课堂检测汇总：投影拓扑 / 触摸 / 无线投屏 / 教学软件 / 还原环境。"""

@@ -67,6 +67,8 @@ export interface OcApi {
   webconsole_start(port?: number): Promise<any>
   webconsole_stop(): Promise<any>
   webconsole_regenerate(): Promise<any>
+  health_watch_status(): Promise<any>
+  health_watch_scan(): Promise<any>
   classroom_report(): Promise<any>
   refresh_teaching_apps(): Promise<any>
   open_touch_calibration(): Promise<any>
@@ -343,6 +345,12 @@ const MOCK_API: OcApi = {
   async webconsole_start() { return { ok: false, message: '开发预览模式：无法启动控制台' } },
   async webconsole_stop() { return { ok: true, message: '开发预览模式' } },
   async webconsole_regenerate() { return { ok: false, code: '', message: '开发预览模式' } },
+  async health_watch_status() {
+    return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], counts: {}, disks: [], crashes: { count: 0, windowDays: 14 } }
+  },
+  async health_watch_scan() {
+    return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], counts: {}, disks: [], crashes: { count: 0, windowDays: 14 }, message: '开发预览模式：未执行真实扫描' }
+  },
   async classroom_report() {
     return { items: [], apps: [], total: 0 }
   },
