@@ -57,8 +57,14 @@ def main() -> int:
     try:
         script = ROOT / "scripts" / "sync_version.py"
         if script.is_file():
+            # 必须显式指定 utf-8：子进程输出的是 UTF-8 中文，而 Windows 默认按
+            # GBK 解码，会直接抛 UnicodeDecodeError 把整个打包流程带崩
             result = subprocess.run(
-                [sys.executable, str(script)], capture_output=True, text=True
+                [sys.executable, str(script)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             for line in (result.stdout or "").strip().splitlines():
                 print(f"[pack] {line}")

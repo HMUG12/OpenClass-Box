@@ -1,0 +1,8 @@
+# 开发与测试依赖（不影响打包产物）
+#
+# 安装：pip install -r requirements-dev.txt
+# 运行测试：python -m pytest -q
+
+-r requirements.txt
+
+pytest>=8.0

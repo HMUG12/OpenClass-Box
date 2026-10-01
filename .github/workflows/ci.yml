@@ -1,0 +1,61 @@
+name: CI
+
+# 每次推送与 PR 都跑一遍「能不能发版」的最小检查：
+#   版本号一致性 → 单元测试 → 前端构建 → 冒烟检查
+#
+# 为什么放在 windows-latest：项目的很多逻辑（注册表、WMI、路径判定、
+# 开始菜单/关联）是 Windows 专属的，在 Linux 上跑等于没验证。
+#
+# 完整的 PyInstaller 打包与安装包编译耗时较长（产物 1GB+，且需要本地
+# 第三方组件），由发布流程负责；这里只保证「主分支随时可打包」。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 版本号一致性（version.json 为唯一来源）
+        run: python scripts/sync_version.py --check
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: 单元测试
+        run: python -m pytest -q
+
+      - name: 前端依赖与构建
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: 冒烟检查（不启动界面）
+        run: python scripts/smoke.py
+
+      - name: 打包脚本可导入性检查
+        run: python -c "import ast, pathlib; ast.parse(pathlib.Path('pack.py').read_text(encoding='utf-8')); print('pack.py 语法正常')"

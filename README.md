@@ -1,30 +1,35 @@
-# OpenClass
+# OpenClass-Box
 
-Windows 桌面工具箱。收录实用小工具，并提供一套零配置的插件机制：
-把一个工具文件夹放进 `tools/`，它就会出现在界面上，无需改动任何代码。
+面向**课堂教学一体机**的开源运维工具箱（Windows 桌面端）。
+
+场景很具体：教室一体机被学生装乱了、投屏断了、触摸失灵、白板闪退、老师上课前发现没声音 ——
+电教委员要在最短时间里判断问题、修好它，最好还能远程看一眼。
+OpenClass-Box 把这些事收进一个绿色便携的程序里：**插上就能用，不装服务、不注册、离线可用**。
+
+> 当前版本 **0.1.5 Beta**。版本号的唯一来源是 [`version.json`](version.json)，
+> 由 `python scripts/sync_version.py` 同步到各处（打包时会自动执行）。
 
 ---
 
-## 功能
+## 功能一览
 
 | 模块 | 说明 |
-|------|------|
-| 系统状态 | CPU / 内存 / 存储用量、网络实时速率曲线、IP 与网关、硬件明细、网卡列表 |
-| 工具箱 | 已收录工具的网格视图，支持分类筛选与关键词搜索 |
-| 插件 | 列出外部工具与插件，可重新扫描或打开工具目录 |
-| 设置 | 浅色 / 深色 / 跟随系统，偏好保存在程序目录 |
-| 关于 | 运行环境与路径信息 |
-
-### 系统状态页
-
-主页展示三类实时监测：
-
-- **硬件**：处理器型号、核心线程数、频率、内存与交换分区、磁盘分区用量、显示适配器、主板、启动时间
-- **网络**：每秒下行 / 上行速率（双曲线，纵轴共享以保可比）、累计收发、网卡 IPv4/MAC/速率
-- **IP**：主机名、局域网 IP、默认网关、DNS，公网 IP 需手动触发查询
-
-> 公网 IP 是**唯一依赖网络的动作**。工具箱的主战场是离线环境，
-> 因此该项设计为手动触发 + 多源回退 + 2.5 秒超时，取不到时显示「未获取到」而不是报错。
+|---|---|
+| **系统状态** | CPU / 内存 / 磁盘 / 网速实时曲线、公网 IP（手动触发）、硬件快照 |
+| **硬件信息** | CPU、显卡（含核显，虚拟显示适配器自动过滤）、内存条、硬盘健康与温度、主板、BIOS |
+| **机房管理** | A 端＝服务端（管理端）· B 端＝本体（被管理端）：设备列表、批量下发体检 / 修复 / 清理 / 消息 / 文件 / 换壁纸、远程电源控制、定时下发 |
+| **维护** | 课堂检测（投影 / 触摸 / 无线投屏 / 教学软件 / 还原环境）· 一键体检 · 一键修复 · 磁盘清理 · 网络诊断 · 诊断包 · 学期模式 · 便携急救盘 |
+| **工具箱** | 工具网格 + 分类筛选 + 关键词搜索；**插件市场**（JSON 索引 + 一键安装 + 离线导入） |
+| **手机 Web 控制台** | 同一 WiFi 下手机浏览器打开就能看状态、跑体检、远程修复，零安装、不连外网 |
+| **A 端远程管理（Web）** | 通过内网穿透在教室外管理整个机房：设备列表 / 下发指令 / 电源控制 / 文件下发 / 操作审计 |
+| **内网穿透套件** | cloudflared / frp / ngrok / 自定义命令，自动抓公网地址，参数本地保存 |
+| **临时传输** | 局域网内"用完即走"的聊天与文件互传（房间码 + 可选密码，退出即清空） |
+| **定时任务** | 命令 / 脚本（bat、cmd、ps1、vbs）/ 程序，支持每天、每周、一次性、开机后 |
+| **安全** | 风险网址检测、剪贴板与浏览器行为监测、五项系统防护（浏览器篡改 / USB / 自启动 / 弹窗 / 高占用）、密码保护 |
+| **音乐** | 本地曲库 + 在线搜索到本地缓存后播放，播放队列 / 进度 / 音量 / 循环 |
+| **壁纸** | 静态图片（含位置与缩放）+ 动图 / 视频（mpv 渲染到桌面层）+ 导入管理 |
+| **兼容性知识库** | 内置常见问题条目 + 按本机环境自动匹配 + 记录经验 + 导出问题报告 |
+| **设置** | 主题、系统集成（自启 / 托盘 / 关闭行为 / 启动行为）、被链接（B 端）、远程管理、局域网放行、存储位置与保存诊断、更新检测 |
 
 ---
 
@@ -32,47 +37,46 @@ Windows 桌面工具箱。收录实用小工具，并提供一套零配置的插
 
 | 层 | 选型 |
 |---|---|
-| 界面渲染 | WebView2（Windows 10/11 系统组件，无需打包 Chromium） |
+| 界面渲染 | WebView2（Windows 系统组件；安装包内附固定版本运行时兜底） |
 | 前端 | React 18 + TypeScript + Vite + Fluent UI v9 |
-| 宿主 | Python + `pywebview` |
-| 系统监测 | `psutil` + WMI（PowerShell CIM）+ `ipconfig` |
-| 打包 | PyInstaller（`--onedir`，绿色便携） |
+| 宿主 | Python 3.13 + `pywebview` |
+| 系统监测 | `psutil` + WMI（PowerShell CIM）+ 注册表 + 系统命令 |
+| 局域网 | 纯标准库 `ThreadingHTTPServer` + UDP 发现 + 长轮询 |
+| 打包 | PyInstaller（`--onedir`）+ Inno Setup 6 |
 
-业务逻辑在 Python 侧；工具全部以**独立进程**启动，崩溃不会拖垮主界面。
+业务逻辑全在 Python 侧；工具与插件一律**独立进程**启动，崩溃不会拖垮主界面。
 
 ---
 
 ## 快速开始
 
-### 1. 安装依赖
-
 ```powershell
 pip install -r requirements.txt
-```
 
-### 2. 构建前端（只需在前端有改动时执行）
-
-```powershell
 cd frontend
 npm install
 npm run build
+
+cd ..
+python main.py            # 加载 frontend/dist
+python main.py --dev      # 连接 vite 开发服务器（配合 npm run dev）
+python main.py --debug    # 开启 WebView 调试
+python main.py --role=a   # 以 A 端（服务端）启动；--role=b 为 B 端
 ```
 
-### 3. 运行
-
-```powershell
-python main.py          # 加载 frontend/dist
-python main.py --dev    # 连接 localhost:5173，配合 npm run dev 做热更新
-python main.py --debug  # 开启 WebView 调试
-```
-
-### 4. 健康检查
+健康检查（不启动界面）：
 
 ```powershell
 python scripts/smoke.py
 ```
 
-不启动界面，验证路径解析、工具注册、配置读写与系统监测是否正常。
+打包与安装包：
+
+```powershell
+python pack.py                    # PyInstaller 打包（自动同步版本号、清理旧产物）
+iscc OpenClass.iss                # B 端安装包
+iscc /DRoleNum=1 OpenClass.iss    # A 端安装包（不含大体积第三方工具）
+```
 
 ---
 
@@ -80,68 +84,92 @@ python scripts/smoke.py
 
 ```
 OpenClass/
-├── main.py                 # 入口
+├── main.py                  # 开发态入口
+├── pack.py                  # 打包脚本（版本同步 / 启动自检 / 清理旧产物）
+├── OpenClass.iss            # Inno Setup 安装包脚本（A/B 共用，靠 /DRoleNum 区分）
+├── version.json             # 版本号唯一来源
+├── SIGNING.md               # 代码签名与供应链验证（sigstore / SignPath）
+├── RELEASE_NOTES.md         # 发布说明
 ├── backend/
-│   ├── api.py              # 前端 ⇄ Python 的边界
-│   ├── main.py             # pywebview 宿主
-│   └── core/
-│       ├── paths.py        # 单一路径真相（便携：跟随 exe 目录）
-│       ├── config.py       # 偏好持久化
-│       ├── registry.py     # 工具注册表（扫描即发现）
-│       ├── runner.py       # 独立进程启动器（含 UAC 提权）
-│       └── monitor.py      # 硬件 / 网络 / IP 监测
-├── frontend/               # React + Fluent UI
+│   ├── main.py              # pywebview 宿主：窗口、托盘、启动流程
+│   ├── api.py               # 前端 ⇄ Python 的唯一边界
+│   ├── core/                # 业务模块（配置、路径、监测、体检、修复、安全、插件、任务…）
+│   ├── net/                 # 局域网协同（协议、发现、服务端、客户端、指令）
+│   └── system/              # 托盘、开机自启、文件关联、单实例
+├── frontend/
 │   └── src/
-│       ├── App.tsx         # 主布局与主题
-│       ├── api.ts          # 后端调用封装（内置 mock，可脱离宿主预览）
-│       ├── format.ts       # 数值格式化
-│       ├── components/     # SideNav / TitleBar / ToolCard / UsageBar / SparkLine
-│       └── pages/          # Dashboard / Tools / Plugins / Settings / About
-├── tools/                  # 工具目录（详见 tools/README.md）
-└── scripts/smoke.py        # 冒烟检查
+│       ├── app/ 组件/ 页面/ 样式
+│       ├── api.ts           # 后端调用封装（内置 mock，可脱离宿主预览界面）
+│       └── pages/           # 各功能页面
+├── plugins/                 # 示例插件（课堂计时器 / 随机点名）+ 索引 index.json
+├── scripts/
+│   ├── smoke.py             # 冒烟检查
+│   └── sync_version.py      # 版本号同步与校验
+├── docs/                    # 文档（含 ROADMAP）
+└── tools/                   # 工具与插件目录（体积大，不入库；首次运行自动创建）
 ```
+
+> `tools/` **不随仓库分发**：里面是第三方二进制（OpenOffice / VLC / mpv 等）与用户插件。
+> 运行后目录会自动创建；安装包在打包时把需要的组件一并带上。
 
 ---
 
-## 新增一个工具
+## 插件机制
 
-在 `tools/` 下建一个文件夹，放入 `tool.json` 与入口文件即可，
-不必修改任何 Python 代码。完整契约见 [`tools/README.md`](tools/README.md)。
+在 `tools/`（或从插件市场安装到）一个文件夹，放入 `tool.json` 与入口文件即可，**无需改任何代码**：
 
 ```json
 {
-  "id": "file_hash",
-  "name": "文件哈希校验",
-  "description": "计算文件的 MD5 / SHA1 / SHA256 / SHA512",
-  "category": "file",
-  "icon": "#️⃣",
+  "id": "classroom-timer",
+  "name": "课堂计时器",
+  "description": "倒计时 / 正计时，空格开始、F 全屏",
+  "category": "classroom",
   "version": "1.0.0",
   "author": "OpenClass",
-  "entry": "main.py"
+  "entry": "index.html"
 }
 ```
 
-支持 `.exe` / `.bat` / `.ps1` / `.py`。第三方绿色软件原样拷进去也能被自动识别。
+支持的入口：`.exe` / `.bat` / `.cmd` / `.ps1` / `.py` / `.html`（网页类插件直接用默认浏览器打开）。
+
+插件市场只做三件事：**读 JSON 索引 → 下载 → 校验 sha256 后解压**。
+安装过程额外做了防目录穿越、解压总量限制、只允许 https；卸载只删 `tools/` 下带 `tool.json` 的目录。
+
+---
+
+## 安全与签名
+
+- **代码签名**：发布包由 GitHub Actions 做 **sigstore 无密钥签名**，签名与证书写入 Rekor 透明日志，
+  任何人可用一条命令验证"文件确实出自本仓库 CI 且未被篡改"。详见 [`SIGNING.md`](SIGNING.md)。
+- **Windows Authenticode**：已按 **SignPath Foundation** 的要求准备申请材料（同一份文档第四节）。
+- **远程管理**：默认关闭；访问码强制 ≥8 位、失败锁定、默认只接受内网来源；
+  危险动作（电源）二次确认 + 延迟执行 + 全程审计；**电源只下发给 B 端，A 端自身永不执行**。
+  演示或培训可设 `OPENCLASS_SAFE_TEST=1`，此时电源操作只记录、不执行。
+- **数据主权**：所有配置与运行时数据都写在程序目录（或用户目录）的 `data/` 下，不上传任何服务器。
 
 ---
 
 ## 设计取舍
 
-- **便携优先**：数据目录固定在程序所在目录，不使用 `%APPDATA%`，整个文件夹可拷进 U 盘
-- **进程隔离**：工具之间、工具与主程序之间互不影响
-- **离线可用**：除公网 IP 查询外无任何网络依赖
-- **统一采样**：实时指标由后台线程按 1 秒间隔采集并缓存，前端只读快照
+- **便携优先**：数据跟随程序目录，整个文件夹可以拷进 U 盘；装到 `Program Files` 这类受保护位置时
+  自动改用用户目录 —— 避免"管理员与普通用户看到的不是同一份配置"。
+- **离线可用**：除公网 IP、更新检测、插件市场外无网络依赖；教室没外网时功能不打折。
+- **如实反馈**：拿不到的数值一律显示"不可用"而不是编一个；失败要给出**可读原因**（DNS / 超时 / 限流 / 权限）。
+- **进程隔离**：工具之间、工具与主程序互不影响。
+- **配置可靠**：配置采用原子写 + 失败自动回退，设置页可直接看到"最近一次保存"的结果。
 
 ---
 
 ## 已知限制
 
-- WebView2 运行时在部分老版本 Windows 10（如 LTSC）上可能缺失，需手动安装离线包
-- WMI 查询（显卡 / 主板）首次调用约 1~2 秒，结果缓存，仅影响首屏
-- 尚未提供打包脚本，绿色版需自行用 PyInstaller 以 `--onedir` 方式构建
+- WinPE 急救盘需微软 ADK 与数 GB 镜像，当前以 **USB 便携急救盘**覆盖大部分场景
+- 离线 AI 诊断解读暂缓（本地小模型会使包体增加数百 MB）
+- 动态壁纸依赖 `tools/mpv/`，且不同 Windows 版本的桌面承载窗口（WorkerW）结构有差异，已在代码里做四级兜底
+- 部分功能需要管理员权限并触发 UAC（结束进程、网络重置、创建还原点等）
+- 局域网相关功能需要防火墙放行（设置页提供一键放行）
 
 ---
 
 ## 许可证
 
-MIT License. 见 [LICENSE](LICENSE)。
+MIT License. 见 [LICENSE](LICENSE)。随包分发的第三方组件各自保留原许可证（清单见 `SIGNING.md` 第 4.3 节）。
