@@ -375,6 +375,26 @@ def scan() -> dict[str, Any]:
     except Exception:
         pass
 
+    # 还原保护状态：不替代还原卡，但"保护被关了"必须让人知道
+    restore: dict[str, Any] = {}
+    try:
+        from .restore_watch import detect as detect_restore
+
+        restore = detect_restore()
+        if restore.get("level") in ("watch", "warn"):
+            actions.append(
+                {
+                    "kind": "restore",
+                    "level": restore["level"],
+                    "levelLabel": restore["levelLabel"],
+                    "title": "还原保护",
+                    "detail": "；".join(restore.get("reasons") or []) or restore.get("detail", ""),
+                    "advice": restore.get("advice", ""),
+                }
+            )
+    except Exception:
+        restore = {}
+
     actions.sort(key=lambda item: _ORDER.index(item["level"]))
 
     worst = "ok"
@@ -390,6 +410,7 @@ def scan() -> dict[str, Any]:
         "disks": disks,
         "crashes": crashes,
         "cpu": cpu,
+        "restore": restore,
         "actions": actions,
         "counts": {
             "replace": sum(1 for a in actions if a["level"] == "replace"),

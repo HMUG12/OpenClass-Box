@@ -560,6 +560,15 @@ class Api:
 
         return scan_and_cache()
 
+    def restore_watch_check(self) -> dict[str, Any]:
+        """还原保护状态：装了没有、**是否真的在工作**（服务停止/被禁用会报出来）。
+
+        只读取状态，绝不代还原软件开关保护（见 core/restore_watch.py 的边界说明）。
+        """
+        from .core.restore_watch import detect
+
+        return detect()
+
     @timed("课堂检测")
     def classroom_report(self) -> dict[str, Any]:
         """课堂检测汇总：投影拓扑 / 触摸 / 无线投屏 / 教学软件 / 还原环境。"""

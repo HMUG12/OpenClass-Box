@@ -69,6 +69,7 @@ export interface OcApi {
   webconsole_regenerate(): Promise<any>
   health_watch_status(): Promise<any>
   health_watch_scan(): Promise<any>
+  restore_watch_check(): Promise<any>
   classroom_report(): Promise<any>
   refresh_teaching_apps(): Promise<any>
   open_touch_calibration(): Promise<any>
@@ -347,6 +348,9 @@ const MOCK_API: OcApi = {
   async webconsole_regenerate() { return { ok: false, code: '', message: '开发预览模式' } },
   async health_watch_status() {
     return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], counts: {}, disks: [], crashes: { count: 0, windowDays: 14 } }
+  },
+  async restore_watch_check() {
+    return { installed: false, level: 'ok', levelLabel: '正常', reasons: [], products: [], detail: '', advice: '' }
   },
   async health_watch_scan() {
     return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], counts: {}, disks: [], crashes: { count: 0, windowDays: 14 }, message: '开发预览模式：未执行真实扫描' }

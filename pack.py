@@ -81,16 +81,16 @@ def main() -> int:
         stamp = time.strftime("%Y%m%d_%H%M%S")
         out_dir.rename(DIST / f"OpenClass-Box_old_{stamp}")
 
-    # 旧产物只保留最近 2 份：留备份是为了回滚，但攒多了白占几个 GB。
-    # 注意：部分环境对「一次删除大量文件」有安全拦截（几千个文件会被拦下并中断进程），
-    # 所以这里失败只提示、绝不打断打包 —— 备份只是占空间，不影响本次产物。
+    # 旧产物备份：**这里只统计、不删除**。
+    #
+    # 原因：部分环境对「一次删除几千个文件」有底层安全拦截，会把整个打包进程带走
+    # —— 连 try/except 都拦不住（不是 Python 异常，而是进程被中断）。
+    # 备份只占磁盘空间、不影响本次产物，不值得拿打包稳定性去换。想清理时手动删即可。
     backups = sorted(DIST.glob("OpenClass-Box_old_*"), key=lambda p: p.name, reverse=True)
-    for stale in backups[2:]:
-        try:
-            shutil.rmtree(stale, ignore_errors=True)
-            print(f"[pack] 已清理旧产物备份 {stale.name}")
-        except Exception as exc:  # noqa: BLE001
-            print(f"[pack] 跳过清理 {stale.name}（{exc}）；可手动删除以释放空间")
+    if len(backups) > 2:
+        print(f"[pack] 提示：现有 {len(backups)} 份旧产物备份（建议只保留最近 2 份，可手动删除）")
+        for stale in backups[2:]:
+            print(f"[pack]   可删除：{stale.name}")
 
     cmd = [
         sys.executable,

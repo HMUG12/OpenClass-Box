@@ -159,6 +159,18 @@ export default function HealthWatchPanel() {
         </div>
       )}
 
+      {data?.restore?.installed && (
+        <div className="oc-usage-sub" style={{ marginTop: 8 }}>
+          还原保护：{data.restore.detail}
+          {data.restore.level !== 'ok' && (
+            <b style={{ color: 'var(--oc-warning)' }}>
+              {' '}
+              —— 学生改动会真正写入系统盘，请确认保护状态
+            </b>
+          )}
+        </div>
+      )}
+
       {data?.crashes?.count > 0 && (
         <div className="oc-usage-sub" style={{ marginTop: 8 }}>
           近 {data.crashes.windowDays} 天异常关机 / 蓝屏 {data.crashes.count} 次
