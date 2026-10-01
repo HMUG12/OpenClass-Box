@@ -53,6 +53,52 @@ def _event_log_text(name: str) -> str:
         return f"（读取 {name} 日志失败：{exc}）"
 
 
+def _scrub(text: str) -> str:
+    """脱敏：把用户名与用户目录换成占位符。
+
+    诊断包十有八九要发给别人（维修人员、群里、老师），而系统信息与
+    事件日志里天然带着 `C:\\Users\\张三\\...` 这类路径 —— 这是老师的真名。
+    这里只做**精确替换**（路径里的用户名、用户名@主机名），
+    不按子串乱替，避免把 "Administrator" 之类的词误伤。
+    """
+    import re
+
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or ""
+    home = os.path.expanduser("~")
+    if home and home not in ("~", "/", "\\"):
+        text = text.replace(home, r"%USERPROFILE%")
+    if not user or len(user) < 3:
+        return text
+
+    escaped = re.escape(user)
+    rules = (
+        (rf"(?i)([A-Za-z]:\\Users\\){escaped}\b", r"\1<用户>"),
+        (rf"(?i)(\\\\Users\\){escaped}\b", r"\1<用户>"),
+        (rf"(?i)\b{escaped}@", "<用户>@"),
+    )
+    for pattern, replacement in rules:
+        text = re.sub(pattern, replacement, text)
+    return text
+
+
+_PRIVACY_NOTE = """OpenClass-Box 诊断包 —— 内容与隐私说明
+
+本包用于向他人（维修人员 / 管理员）说明本机状况，内含：
+  · system-info.txt     系统与硬件信息（版本、CPU、内存、磁盘、网络配置）
+  · health.txt          一键体检结果
+  · event-application.txt / event-system.txt   系统事件日志（Application / System）
+
+已做脱敏：
+  · 用户目录被替换为 %USERPROFILE%（例如 C:\\Users\\<用户>\\Desktop）
+  · 路径中的用户名与「用户名@主机名」被替换为 <用户>
+  · **不包含**任何密码、访问码、配对码、浏览器历史或文档内容
+
+请注意：
+  事件日志里仍可能保留进程路径、软件名与设备型号等中性信息；
+  若仍不放心，可在发送前自行打开本包检查、删除不必要的内容。
+"""
+
+
 def export() -> dict[str, Any]:
     """生成诊断包到桌面，返回 {ok, path, size, parts, message}。"""
     stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -64,9 +110,12 @@ def export() -> dict[str, Any]:
     parts: list[str] = []
     try:
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
-            # 1) 系统信息
+            # 0) 隐私说明：诊断包经常要发给别人，先说清楚含什么、不含什么
+            archive.writestr("隐私说明.txt", _PRIVACY_NOTE)
+
+            # 1) 系统信息（脱敏后写入）
             try:
-                archive.writestr("system-info.txt", render_text(collect_system()))
+                archive.writestr("system-info.txt", _scrub(render_text(collect_system())))
                 parts.append("系统信息")
             except (OSError, ValueError) as exc:
                 archive.writestr("system-info.txt", f"采集失败：{exc}")
@@ -78,17 +127,17 @@ def export() -> dict[str, Any]:
                     f"{'正常' if item['ok'] else '异常'}｜{item['name']}：{item['detail']}"
                     for item in health["items"]
                 ]
-                archive.writestr("health.txt", "\n".join(lines))
+                archive.writestr("health.txt", _scrub("\n".join(lines)))
                 parts.append("体检结果")
             except (OSError, ValueError) as exc:
                 archive.writestr("health.txt", f"采集失败：{exc}")
 
-            # 3) 事件日志
+            # 3) 事件日志（脱敏后写入：这里最容易带出用户名与路径）
             for log_name, file_name in (
                 ("Application", "event-application.txt"),
                 ("System", "event-system.txt"),
             ):
-                archive.writestr(file_name, _event_log_text(log_name))
+                archive.writestr(file_name, _scrub(_event_log_text(log_name)))
                 parts.append(f"{log_name} 日志")
 
         size = zip_path.stat().st_size

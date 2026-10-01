@@ -252,10 +252,22 @@ class AppHost:
 
         # 渲染兼容：部分一体机（老显卡 / 驱动）在 WebView2 硬件合成下会出现
         # 「点某些界面整窗黑屏」，关掉 GPU 合成即可绕开（对日常使用影响很小）。
-        # 用环境变量设置，用户/我们都能用 system_settings 覆盖。
-        os.environ.setdefault(
-            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu-compositing"
-        )
+        #
+        # 渲染模式可在「设置 → 系统集成 → 渲染模式」里切换：
+        #   safe（默认）= 关闭 GPU 合成，优先保证不黑屏；
+        #   gpu          = 启用 GPU 合成，动画更顺滑（确认本机不黑屏后再切）
+        render_mode = "safe"
+        try:
+            from .core.config import config as _config
+
+            render_mode = str(_config.get("render_mode", "safe") or "safe").lower()
+        except Exception:
+            render_mode = "safe"
+
+        if render_mode != "gpu":
+            os.environ.setdefault(
+                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu-compositing"
+            )
 
         # 窗口直接显示：启动动画由 frontend/public/loading.html 负责
         # （窗口一打开就能看到的加载动画），不再做「窗口隐藏 + 滑入」
@@ -327,7 +339,10 @@ class AppHost:
         # 本机定时任务调度器：总开关关闭时它只是空转，不会有任何执行
         try:
             from .core.tasks import runner
+            from .core.tasks import set_notifier as tasks_set_notifier
 
+            # 任务失败时弹一次托盘气泡（后台任务静默失败最难排查）
+            tasks_set_notifier(lambda title, message: self.tray.notify(title, message))
             runner.start()
         except Exception:
             pass

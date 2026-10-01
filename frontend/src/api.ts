@@ -117,6 +117,8 @@ export interface OcApi {
   set_startup_mode(mode: string): Promise<any>
   get_startup_animation(): Promise<boolean>
   set_startup_animation(value: boolean): Promise<boolean>
+  get_render_mode(): Promise<any>
+  set_render_mode(mode: string): Promise<any>
   get_appearance(): Promise<any>
   set_appearance(patch: Record<string, any>): Promise<any>
   webconsole_firewall(): Promise<any>
@@ -424,6 +426,8 @@ const MOCK_API: OcApi = {
   async set_startup_mode() { return { ok: true, mode: 'window', message: '开发预览模式' } },
   async get_startup_animation() { return true },
   async set_startup_animation() { return true },
+  async get_render_mode() { return { mode: 'safe', note: '' } },
+  async set_render_mode() { return { ok: true, mode: 'safe', message: '开发预览模式' } },
   async get_appearance() {
     return { accent: 'default', radius: 'standard', font: 'standard', glass: false }
   },

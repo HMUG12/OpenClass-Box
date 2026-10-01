@@ -38,6 +38,19 @@ MAX_LOG_LINES = 300         # 本地执行记录条数上限
 
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+# 失败通知回调（托盘气泡），由 main 启动时注入 —— 避免这里反向依赖界面层
+_notify = None
+
+
+def set_notifier(func) -> None:
+    """注入通知回调：定时任务失败时弹一次托盘气泡。
+
+    定时任务是后台跑的，用户不会盯着日志；失败了至少要"冒个泡"，
+    否则任务静默失效、直到某天才被发现。
+    """
+    global _notify
+    _notify = func
+
 KINDS: dict[str, str] = {
     "command": "命令",
     "script": "脚本",
@@ -270,6 +283,13 @@ def _execute(item: dict[str, Any]) -> dict[str, Any]:
         detail = f"执行失败：{exc}"
 
     elapsed = round(time.time() - started, 1)
+
+    if not ok and _notify is not None:
+        try:
+            _notify("定时任务失败", f"{item.get('name') or '未命名'}：{detail}")
+        except Exception:
+            pass
+
     record = {
         "ts": int(time.time() * 1000),
         "name": str(item.get("name") or ""),

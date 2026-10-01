@@ -26,6 +26,41 @@ DESCRIPTION = "开源实用工具箱"
 _VALID_THEMES = ("light", "dark", "system")
 
 
+# 接口耗时告警阈值（秒）：超过就写一条 WARN 进运行日志
+SLOW_CALL_SECONDS = 1.0
+
+
+def timed(label: str):
+    """给对外接口加耗时统计（只标注已知的耗时接口，不做全量拦截）。
+
+    前端一次点击通常对应一个 API 调用；用户报「点了没反应 / 界面卡住」时，
+    日志里能直接看出是哪个接口慢，比人工逐个复现快得多。
+    """
+
+    def decorator(func):
+        import functools
+        import time
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            started = time.perf_counter()
+            try:
+                return func(*args, **kwargs)
+            finally:
+                cost = time.perf_counter() - started
+                if cost >= SLOW_CALL_SECONDS:
+                    try:
+                        from .core.applog import log
+
+                        log(f"慢调用：{label} 用了 {cost:.2f} 秒", "WARN")
+                    except Exception:
+                        pass
+
+        return wrapper
+
+    return decorator
+
+
 class Api:
     """前端 ⇄ Python 的边界。所有方法返回值必须是 JSON 可序列化对象。"""
 
@@ -505,6 +540,7 @@ class Api:
     # 课堂专属工具（投屏 / 触摸 / 教学软件 / 还原环境）
     # ══════════════════════════════════════════════════════
 
+    @timed("课堂检测")
     def classroom_report(self) -> dict[str, Any]:
         """课堂检测汇总：投影拓扑 / 触摸 / 无线投屏 / 教学软件 / 还原环境。"""
         from .core.classroom import report
@@ -846,6 +882,7 @@ class Api:
 
         return current_wallpaper()
 
+    @timed("一键体检")
     def run_health_checks(self) -> dict[str, Any]:
         """一键体检：网络 / 声音 / 显示 / 磁盘 / 内存（全部离线）。"""
         from .core.health import run_checks
@@ -877,6 +914,7 @@ class Api:
 
         return export()
 
+    @timed("磁盘清理分析")
     def analyze_cleanup(self) -> dict[str, Any]:
         """统计可清理项及真实占用。"""
         from .core.cleanup import analyze
@@ -919,6 +957,7 @@ class Api:
 
         return create_point(description)
 
+    @timed("生成诊断包")
     def export_diagnostics(self) -> dict[str, Any]:
         """生成诊断包（系统信息 + 体检 + 事件日志）到桌面。"""
         from .core.applog import log
@@ -971,6 +1010,7 @@ class Api:
 
         return list_startup()
 
+    @timed("硬件详情")
     def get_hardware_detail(self, quick: bool = False) -> dict[str, Any]:
         """详细硬件信息（CPU/显卡/内存/硬盘/主板/温度），全部本机实测。
 
@@ -1024,6 +1064,31 @@ class Api:
             "ok": ok,
             "mode": value,
             "message": "已保存（下次启动生效）" if ok else "保存失败（数据目录不可写）",
+        }
+
+    # ── 渲染模式（GPU 合成）────────────────────────────────
+
+    def get_render_mode(self) -> dict[str, Any]:
+        """渲染模式：safe = 关闭 GPU 合成（避免黑屏，默认）；gpu = 启用（动画更顺）。"""
+        mode = str(config.get("render_mode", "safe") or "safe").lower()
+        if mode not in ("safe", "gpu"):
+            mode = "safe"
+        return {
+            "mode": mode,
+            "note": "改为「性能优先」后需重启程序生效；若出现界面黑屏请切回「兼容优先」",
+        }
+
+    def set_render_mode(self, mode: str) -> dict[str, Any]:
+        value = "gpu" if str(mode).lower() == "gpu" else "safe"
+        ok = bool(config.set("render_mode", value))
+        return {
+            "ok": ok,
+            "mode": value,
+            "message": (
+                "已保存（下次启动生效）：渲染会更顺滑" if value == "gpu" else "已保存（下次启动生效）：优先保证不黑屏"
+            )
+            if ok
+            else "保存失败（数据目录不可写）",
         }
 
     def get_startup_animation(self) -> bool:

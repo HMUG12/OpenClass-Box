@@ -67,6 +67,21 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [startupMsg, setStartupMsg] = useState('')
   const [autoMsg, setAutoMsg] = useState('')
 
+  // ── 渲染模式（GPU 合成：黑屏与性能之间的取舍）──
+  const [renderMode, setRenderMode] = useState('safe')
+  const [renderMsg, setRenderMsg] = useState('')
+
+  const chooseRender = async (mode: string) => {
+    setBusy(true)
+    try {
+      const result = await api.set_render_mode(mode)
+      setRenderMode(result?.mode ?? mode)
+      setRenderMsg(result?.message ?? '')
+    } finally {
+      setBusy(false)
+    }
+  }
+
 
   const [firewall, setFirewall] = useState<any>(null)
   const [allowPower, setAllowPower] = useState(false)
@@ -167,7 +182,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   useEffect(() => {
     void (async () => {
       try {
-        const [a, o, c, info, dir, mode, storage, power] = await Promise.all([
+        const [a, o, c, info, dir, mode, storage, power, render] = await Promise.all([
           api.get_autostart(),
           api.get_openwith_registered(),
           api.get_close_to_tray(),
@@ -176,8 +191,10 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           api.get_startup_mode(),
           api.get_storage_info(),
           api.power_control_status(),
+          api.get_render_mode(),
         ])
         setAllowPower(Boolean(power?.allowed))
+        setRenderMode(String(render?.mode || 'safe'))
         try {
           const config = await api.lan_config()
           setLan({
@@ -528,6 +545,34 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
                   静默启动到托盘
                 </Button>
                 {startupMsg && <span className="oc-usage-sub">{startupMsg}</span>}
+              </div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
+            <div style={{ padding: '8px 0' }}>
+              <div style={{ fontWeight: 600 }}>渲染模式</div>
+              <div className="oc-usage-sub">
+                部分一体机（老显卡 / 驱动）在 WebView2 硬件合成下会出现「点某些界面整窗黑屏」。
+                「兼容优先」会关闭 GPU 合成，优先保证画面正常；
+                如果你这台机器一切正常，可以换成「性能优先」，界面动画会更顺滑。
+              </div>
+              <div className="oc-actions" style={{ marginTop: 8 }}>
+                <Button
+                  size="small"
+                  appearance={renderMode === 'safe' ? 'primary' : 'secondary'}
+                  disabled={busy}
+                  onClick={() => void chooseRender('safe')}
+                >
+                  兼容优先（默认）
+                </Button>
+                <Button
+                  size="small"
+                  appearance={renderMode === 'gpu' ? 'primary' : 'secondary'}
+                  disabled={busy}
+                  onClick={() => void chooseRender('gpu')}
+                >
+                  性能优先（启用 GPU 合成）
+                </Button>
+                {renderMsg && <span className="oc-usage-sub">{renderMsg}</span>}
               </div>
             </div>
             <div style={{ borderTop: '1px solid var(--oc-border)', margin: '4px 0' }} />
