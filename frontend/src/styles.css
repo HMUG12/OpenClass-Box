@@ -232,6 +232,90 @@ body {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   UI 切换与交互过渡
+   原则：短促、克制、有方向感 —— 让人感到"跟手"，而不是等动画演完
+   ═══════════════════════════════════════════════════════════ */
+
+/* 页面切换：淡入 + 轻微上移与缩放（0.22s 收尾柔和） */
+.oc-page {
+  animation: oc-page-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes oc-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.996);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 卡片与面板：悬停轻浮起（沿用同一套时长，整体节奏一致） */
+.oc-panel,
+.oc-toolcard,
+.oc-stat,
+.oc-device {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.oc-toolcard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+  border-color: var(--oc-border-strong);
+}
+
+/* 侧栏项：切换与悬停的过渡，按下时轻微内收 */
+.oc-navitem {
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.12s ease;
+}
+
+.oc-navitem:active {
+  transform: scale(0.98);
+}
+
+/* 按钮与工具栏：点击有回馈，不做长动画 */
+button {
+  transition:
+    background-color 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.1s ease,
+    box-shadow 0.16s ease;
+}
+
+button:active {
+  transform: scale(0.975);
+}
+
+/* 列表行悬停 */
+.oc-list-row {
+  transition: background-color 0.16s ease;
+}
+
+/* 尊重系统的"减少动态效果"设置（无障碍） */
+@media (prefers-reduced-motion: reduce) {
+  .oc-page,
+  .oc-panel,
+  .oc-toolcard,
+  .oc-stat,
+  .oc-device,
+  .oc-navitem,
+  button {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
 /* ── 标题栏 ─────────────────────────────────────────── */
 
 .oc-titlebar {

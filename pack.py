@@ -53,6 +53,20 @@ def main() -> int:
     _ensure_reward_image()
     DIST.mkdir(parents=True, exist_ok=True)
 
+    # 打包前把四处版本号同步一次，避免出现「程序里是 0.1.5、安装包还是 0.1.4」
+    try:
+        script = ROOT / "scripts" / "sync_version.py"
+        if script.is_file():
+            result = subprocess.run(
+                [sys.executable, str(script)], capture_output=True, text=True
+            )
+            for line in (result.stdout or "").strip().splitlines():
+                print(f"[pack] {line}")
+            if result.returncode != 0:
+                print("[pack] 版本号同步失败，请检查 version.json")
+    except Exception as exc:  # noqa: BLE001 —— 同步失败不阻断打包
+        print(f"[pack] 版本同步跳过：{exc}")
+
     # PyInstaller 输出前会删除已存在的目标目录，而该目录通常有数千个文件，
     # 会被安全删除保护拦截（批量删除需确认）导致打包直接失败。
     # 这里先把旧产物重命名挪开，让目标路径保持"不存在"，绕开批量删除。
@@ -60,6 +74,13 @@ def main() -> int:
     if out_dir.exists():
         stamp = time.strftime("%Y%m%d_%H%M%S")
         out_dir.rename(DIST / f"OpenClass-Box_old_{stamp}")
+
+    # 旧产物只保留最近 2 份：留备份是为了回滚，但攒多了白占几个 GB，
+    # 而且手工删大量文件容易被安全软件的批量删除保护拦下
+    backups = sorted(DIST.glob("OpenClass-Box_old_*"), key=lambda p: p.name, reverse=True)
+    for stale in backups[2:]:
+        shutil.rmtree(stale, ignore_errors=True)
+        print(f"[pack] 已清理旧产物备份 {stale.name}")
 
     cmd = [
         sys.executable,

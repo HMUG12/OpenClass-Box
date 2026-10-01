@@ -85,27 +85,14 @@ export default function App() {
   const [version, setVersion] = useState('')
   const [hasUpdate, setHasUpdate] = useState(false)
 
-  // ── 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）──
-  const [appearance, setAppearance] = useState<any>({
-    accent: 'default',
-    radius: 'standard',
-    font: 'standard',
-    glass: false,
-  })
-
-  // 把外观偏好写到 <html> 的 data-* 上：CSS 变量从这里往下继承，
-  // 组件不用关心，也避免每个页面各自读一遍设置
+  // 外观：恢复成「只有主题（浅色 / 深色 / 跟随系统）」的老方案。
+  // 这里顺手清掉早期版本可能残留在 <html> 上的自定义属性，避免历史设置继续生效
   useEffect(() => {
     const root = document.documentElement
-    if (appearance.accent && appearance.accent !== 'default') {
-      root.setAttribute('data-accent', appearance.accent)
-    } else {
-      root.removeAttribute('data-accent')
-    }
-    root.setAttribute('data-radius', appearance.radius || 'standard')
-    root.setAttribute('data-font', appearance.font || 'standard')
-    root.setAttribute('data-glass', appearance.glass ? 'on' : 'off')
-  }, [appearance])
+    ;['data-accent', 'data-radius', 'data-font', 'data-glass'].forEach((key) =>
+      root.removeAttribute(key)
+    )
+  }, [])
 
   // ── 密码保护：受保护页面进入前需要解锁 ──
   const [unlockTarget, setUnlockTarget] = useState('')
@@ -137,16 +124,14 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [saved, list, info, looks] = await Promise.all([
+        const [saved, list, info] = await Promise.all([
           api.get_theme(),
           api.list_tools(),
           api.get_info(),
-          api.get_appearance(),
         ])
         if (saved) setThemeMode(saved)
         setTools(list)
         setVersion(info.version)
-        if (looks) setAppearance(looks)
       } finally {
         setLoading(false)
         // 首屏数据就绪后再让窗口露面（窗口在 main 里是隐藏创建的）：
