@@ -130,6 +130,22 @@ class Config:
                 pass
             return False
 
+    def replace(self, data: dict[str, Any]) -> bool:
+        """用给定数据整体替换当前配置（供「恢复历史备份」使用）。
+
+        设计要点：**落盘失败就把内存也回滚** —— 否则会出现
+        "界面显示已恢复、实际文件还是旧的" 这种最难排查的状态。
+        调用方负责先给当前配置留一份快照（见 config_backup）。
+        """
+        if not isinstance(data, dict):
+            return False
+        previous = dict(self._data)
+        self._data = dict(data)
+        if self.save():
+            return True
+        self._data = previous
+        return False
+
     def set(self, key: str, value: Any) -> bool:
         with self._lock:
             self._data[key] = value

@@ -271,6 +271,15 @@ class AppHost:
 
         # 窗口直接显示：启动动画由 frontend/public/loading.html 负责
         # （窗口一打开就能看到的加载动画），不再做「窗口隐藏 + 滑入」
+        # 启动时补一份配置快照（当天已有就不重复写）：设置被改乱了能回退。
+        # 失败不影响启动 —— 备份是兜底，不是必需品
+        try:
+            from .core.config_backup import auto_backup
+
+            auto_backup()
+        except Exception:
+            pass
+
         self.window = webview.create_window(
             title=WINDOW_TITLE,
             url=url,

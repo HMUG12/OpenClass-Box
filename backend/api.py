@@ -1704,6 +1704,30 @@ class Api:
         """配置存储诊断（文件位置 / 上次保存结果 / 是否回退过）。"""
         return config.diag()
 
+    # ── 配置备份与历史 ────────────────────────────────────
+
+    def config_backup_status(self) -> dict[str, Any]:
+        """备份列表与占用（设置页「配置备份」面板用）。"""
+        from .core.config_backup import status
+
+        return status()
+
+    def config_backup_create(self) -> dict[str, Any]:
+        """立即备份一份当前配置。"""
+        from .core.config_backup import create_backup
+
+        return create_backup("manual")
+
+    def config_backup_restore(self, name: str) -> dict[str, Any]:
+        """恢复到某份历史备份。
+
+        恢复前会自动把**当前**配置另存一份（prerestore），恢复本身
+        也可能是误操作，得让用户能退回来。
+        """
+        from .core.config_backup import restore
+
+        return restore(name)
+
     def open_url(self, url: str) -> bool:
         try:
             webbrowser.open(url)

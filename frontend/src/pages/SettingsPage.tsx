@@ -63,6 +63,48 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [dataDir, setDataDir] = useState('')
   const [storage, setStorage] = useState<any>(null)
   const [diag, setDiag] = useState<any>(null)
+
+  // ── 配置备份（改乱了能回退）──
+  const [backups, setBackups] = useState<any>(null)
+  const [backupMsg, setBackupMsg] = useState('')
+
+  const loadBackups = async () => {
+    try {
+      setBackups(await api.config_backup_status())
+    } catch {
+      /* 开发预览模式忽略 */
+    }
+  }
+
+  const createBackup = async () => {
+    setBusy(true)
+    setBackupMsg('')
+    try {
+      const result = await api.config_backup_create()
+      setBackupMsg(result?.message ?? '')
+    } finally {
+      setBusy(false)
+      await loadBackups()
+    }
+  }
+
+  const restoreBackup = async (name: string) => {
+    if (!window.confirm(`确定恢复到 ${name} 吗？当前设置会先自动另存一份。`)) return
+    setBusy(true)
+    setBackupMsg('')
+    try {
+      const result = await api.config_backup_restore(name)
+      setBackupMsg(result?.message ?? '')
+      if (result?.ok) {
+        // 恢复后让界面按新配置刷新一遍（主题等立即生效）
+        const looks = await api.get_theme().catch(() => null)
+        if (looks) window.location.reload()
+      }
+    } finally {
+      setBusy(false)
+      await loadBackups()
+    }
+  }
   const [startupMode, setStartupMode] = useState('window')
   const [startupMsg, setStartupMsg] = useState('')
   const [autoMsg, setAutoMsg] = useState('')
@@ -225,6 +267,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         } catch {
           /* 开发预览模式忽略 */
         }
+        void loadBackups()
       } catch {
         // 忽略：开发模式下拿不到真实值
       } finally {
@@ -1098,6 +1141,55 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         {diag && diag.savedOk === false && diag.lastError && (
           <div className="oc-list-warn" style={{ marginTop: 6 }}>
             上一次保存失败：{diag.lastError}
+          </div>
+        )}
+
+        {/* 配置备份：改乱了能回退 */}
+        <div style={{ borderTop: '1px solid var(--oc-border)', margin: '12px 0 8px' }} />
+        <div className="oc-info-row">
+          <span>配置备份</span>
+          <span>
+            {backups
+              ? `${backups.count} 份 · ${backups.totalKB} KB（保留最近 ${backups.keep} 份）`
+              : '读取中…'}
+          </span>
+        </div>
+        <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+          每天启动时自动留一份快照。设置被改乱、被覆盖时，可回退到之前那份；
+          恢复前会自动把「当前配置」另存一份，随时能反悔。
+        </div>
+        <div className="oc-actions">
+          <Button size="small" appearance="primary" disabled={busy} onClick={() => void createBackup()}>
+            立即备份
+          </Button>
+          <Button size="small" appearance="secondary" disabled={busy} onClick={() => void loadBackups()}>
+            刷新列表
+          </Button>
+          {backupMsg && <span className="oc-usage-sub">{backupMsg}</span>}
+        </div>
+        {backups?.items?.length > 0 && (
+          <div className="oc-list" style={{ marginTop: 8 }}>
+            {backups.items.slice(0, 8).map((item: any) => (
+              <div className="oc-list-row" key={item.name}>
+                <div className="oc-list-main">
+                  <div className="oc-list-title">
+                    {item.time} · {item.reason}
+                    {item.valid ? '' : '（内容已损坏）'}
+                  </div>
+                  <div className="oc-list-sub">
+                    {item.keys} 项设置 · {(item.size / 1024).toFixed(1)} KB
+                  </div>
+                </div>
+                <Button
+                  size="small"
+                  appearance="secondary"
+                  disabled={busy || !item.valid}
+                  onClick={() => void restoreBackup(item.name)}
+                >
+                  恢复
+                </Button>
+              </div>
+            ))}
           </div>
         )}
         <div className="oc-hint" style={{ marginTop: 8 }}>

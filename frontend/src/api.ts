@@ -114,6 +114,9 @@ export interface OcApi {
   open_log_folder(): Promise<boolean>
   get_storage_info(): Promise<any>
   config_diag(): Promise<any>
+  config_backup_status(): Promise<any>
+  config_backup_create(): Promise<any>
+  config_backup_restore(name: string): Promise<any>
   report_frontend_error(message: string): Promise<any>
   frontend_ready(): Promise<any>
   get_startup_mode(): Promise<string>
@@ -431,6 +434,15 @@ const MOCK_API: OcApi = {
   },
   async config_diag() {
     return { path: '-', savedOk: true, lastSaveAt: 0, lastError: '', fallback: '', keyCount: 0 }
+  },
+  async config_backup_status() {
+    return { ok: true, dir: '-', count: 0, totalKB: 0, keep: 30, items: [], hasAutoToday: false }
+  },
+  async config_backup_create() {
+    return { ok: false, message: '开发预览模式：未执行真实备份' }
+  },
+  async config_backup_restore() {
+    return { ok: false, message: '开发预览模式：未执行真实恢复' }
   },
   async report_frontend_error() { return { ok: true } },
   async frontend_ready() { return { ok: true } },
