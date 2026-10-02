@@ -170,11 +170,29 @@ def local_score(url: str) -> dict[str, Any]:
         score += sub
         reasons += sub_reasons
 
-    # 2) IP 直连 / 非常规端口
+    # 局域网与本机地址**不算可疑**。
+    #
+    # 理由很实在：访问自己机器上的服务（手机控制台 38610、临时传输 38620、
+    # 机房协同 38900）必然是「私有 IP + 自定义端口」，把它判成可疑就是让
+    # 正常操作天天弹提醒 —— 弹多了用户就学会无视，那才是真正的风险。
+    # 公网 IP 仍然照常计分（那条规则本来就是针对外链的）。
+    local_host = False
     if is_ip:
+        try:
+            import ipaddress
+
+            address = ipaddress.ip_address(host)
+            local_host = address.is_private or address.is_loopback or address.is_link_local
+        except ValueError:
+            local_host = host in ("0.0.0.0", "127.0.0.1")
+    elif host in ("localhost", "::1"):
+        local_host = True
+
+    # 2) IP 直连 / 非常规端口
+    if is_ip and not local_host:
         score += 30
         reasons.append("使用 IP 地址访问而非域名")
-    if parsed.port not in (None, 80, 443):
+    if parsed.port not in (None, 80, 443) and not local_host:
         score += 15
         reasons.append(f"使用非常规端口 {parsed.port}")
 

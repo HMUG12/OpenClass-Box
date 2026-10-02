@@ -1,7 +1,7 @@
 name: CI
 
 # 每次推送与 PR 都跑一遍「能不能发版」的最小检查：
-#   版本号一致性 → 单元测试 → 前端构建 → 冒烟检查
+#   版本号一致性 → 单元测试 → hook 顺序 → 前端构建 → 冒烟检查
 #
 # 为什么放在 windows-latest：项目的很多逻辑（注册表、WMI、路径判定、
 # 开始菜单/关联）是 Windows 专属的，在 Linux 上跑等于没验证。
@@ -47,6 +47,12 @@ jobs:
 
       - name: 单元测试
         run: python -m pytest -q
+
+      # 这条检查是被真实事故逼出来的：hook 写在提前 return 之后，
+      # tsc 与 vite 都发现不了（类型对、顺序错），但运行时会让页面白屏
+      # （React error #300）—— 曾经只在"B 端模式"这一种数据状态下犯。
+      - name: hook 顺序检查（React #300 防护）
+        run: python scripts/check_hooks.py
 
       - name: 前端依赖与构建
         working-directory: frontend
