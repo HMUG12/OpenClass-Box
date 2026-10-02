@@ -584,19 +584,16 @@ button:active {
   gap: 12px;
 }
 
+/* 多栏卡片：按**可用宽度**自动决定列数，而不是一刀切。
+   早先是"≤1080px 一律切成单列"，结果最小窗口（900×600）下三张资源卡
+   竖着排，一屏只能看到一张半，要滚很久 —— 而 900px 其实放得下两列。
+   auto-fit + minmax 让它自己算：宽了 3 列、窄了 2 列、再窄才 1 列。 */
 .oc-grid-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
 .oc-grid-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (max-width: 1080px) {
-  .oc-grid-3,
-  .oc-grid-2 {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
 /* ── 键值表 ─────────────────────────────────────────── */

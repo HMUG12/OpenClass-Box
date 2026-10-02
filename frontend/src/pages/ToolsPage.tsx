@@ -109,7 +109,9 @@ export default function ToolsPage({ tools, category, setCategory, onLaunch, onRe
             placeholder="搜索工具名称、描述或标签…"
             value={query}
             onChange={(_e, data) => setQuery(data.value)}
-            style={{ maxWidth: 300 }}
+            // 窄窗口下会被右侧按钮挤到只有 180 出头，placeholder 被截成"或标"。
+            // 让它可伸缩：宽时不超过 320，窄时至少保住 220
+            style={{ flex: '1 1 220px', minWidth: 220, maxWidth: 320 }}
           />
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {kinds.map((k) => (
