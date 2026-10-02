@@ -63,3 +63,7 @@ frontend/vite.config.ts.timestamp-*
 
 # 本地发布产物（安装包体积大，不随仓库分发）
 release/
+
+# playwright-cli 的临时产物（浏览器实测时生成）
+nav.yaml
+.playwright-cli/
