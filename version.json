@@ -1,8 +1,8 @@
 {
-  "version": "0.1.5 Beta",
-  "numeric": "0.1.5.0",
-  "semver": "0.1.5",
-  "tag": "v0.1.5-beta",
-  "channel": "beta",
-  "updatedAt": "2026-10-01"
+  "version": "0.2.0",
+  "numeric": "0.2.0.0",
+  "semver": "0.2.0",
+  "tag": "v0.2.0",
+  "channel": "stable",
+  "updatedAt": "2026-10-02"
 }
