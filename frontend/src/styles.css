@@ -1046,6 +1046,46 @@ button:active {
   margin: 0;
 }
 
+/* 课前准备结论：颜色只表达"能不能上课"，不铺满整屏 —— 老师要看的是那行字 */
+.oc-verdict {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--oc-border);
+  background: var(--oc-bg-soft, rgba(127, 127, 127, 0.08));
+}
+
+.oc-verdict-ready {
+  border-color: rgba(16, 124, 16, 0.45);
+  background: rgba(16, 124, 16, 0.1);
+}
+
+.oc-verdict-attention {
+  border-color: rgba(255, 185, 0, 0.5);
+  background: rgba(255, 185, 0, 0.1);
+}
+
+.oc-verdict-blocked {
+  border-color: rgba(209, 52, 56, 0.5);
+  background: rgba(209, 52, 56, 0.12);
+}
+
+.oc-verdict-label {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.oc-verdict-text {
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.oc-verdict-time {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.65;
+}
+
 /* 可粘贴报告预览：等宽、自动换行、可滚动。
    老师的用法是"看一眼、复制、发出去"，所以中文断行与滚动都要顺手 */
 .oc-report-preview {

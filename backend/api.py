@@ -576,6 +576,16 @@ class Api:
 
         return report()
 
+    @timed("课前准备")
+    def preflight(self) -> dict[str, Any]:
+        """课前准备：一次点击回答"这台机器现在能不能上课"（体检 + 课堂 + 还原保护）。
+
+        结论分三档：可以上课 / 可以上课但有建议 / 建议先处理再上课。
+        """
+        from .core.preflight import run
+
+        return run()
+
     @timed("生成诊断报告")
     def diagnostic_report(self) -> dict[str, Any]:
         """统一诊断报告：体检 + 课堂检测 + 维护清单 → 同一形状 + 可直接粘贴的报修文本。

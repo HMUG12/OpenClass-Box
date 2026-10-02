@@ -24,6 +24,35 @@ export default function ClassroomPage() {
   const [busy, setBusy] = useState(true)
   const [msg, setMsg] = useState('')
 
+  // ── 课前准备：一次点击回答"这台机器现在能不能上课" ──
+  const [pre, setPre] = useState<any>(null)
+  const [preBusy, setPreBusy] = useState(false)
+  const [preMsg, setPreMsg] = useState('')
+
+  const runPreflight = async () => {
+    setPreBusy(true)
+    setPreMsg('')
+    try {
+      setPre(await api.preflight())
+    } catch {
+      setPreMsg('课前准备执行失败，请稍后重试')
+    } finally {
+      setPreBusy(false)
+    }
+  }
+
+  const quickRepair = async (key: string) => {
+    setPreMsg('')
+    try {
+      const outcome = await api.run_repair(key)
+      setPreMsg(outcome?.message ?? '')
+      // 修完立刻复查：结论要跟着变，否则老师不知道到底好了没有
+      await runPreflight()
+    } catch (error) {
+      setPreMsg(`修复失败：${error}`)
+    }
+  }
+
   const load = async () => {
     setBusy(true)
     try {
@@ -70,6 +99,100 @@ export default function ClassroomPage() {
         <div className="oc-page-desc">
           一体机专属检测：投影与触摸是否正常、教学软件装了什么、有没有还原保护
         </div>
+      </div>
+
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div className="oc-panel-title">课前准备</div>
+        <div className="oc-hint" style={{ marginBottom: 10 }}>
+          上课前点一下：把体检、投影触摸、还原保护一起过一遍，直接告诉你能不能上课。
+        </div>
+        <div className="oc-actions">
+          <Button
+            appearance="primary"
+            size="large"
+            onClick={() => void runPreflight()}
+            disabled={preBusy}
+          >
+            {preBusy ? '正在检查…' : '开始课前准备'}
+          </Button>
+          {preMsg && <span className="oc-list-sub">{preMsg}</span>}
+        </div>
+
+        {pre && (
+          <div style={{ marginTop: 12 }}>
+            <div className={`oc-verdict oc-verdict-${pre.verdict}`}>
+              <div className="oc-verdict-label">{pre.verdictLabel}</div>
+              <div className="oc-verdict-text">{pre.headline}</div>
+              {pre.checkedAt && <div className="oc-verdict-time">检查时间：{pre.checkedAt}</div>}
+            </div>
+
+            {pre.blocking?.length > 0 && (
+              <div className="oc-list" style={{ marginTop: 10 }}>
+                {pre.blocking.map((item: any) => (
+                  <div className="oc-list-row" key={item.id}>
+                    <div className="oc-list-main">
+                      <div className="oc-list-title">
+                        {item.title}：{item.summary}
+                      </div>
+                      {item.advice && <div className="oc-list-warn">建议：{item.advice}</div>}
+                    </div>
+                    {item.repairable && (
+                      <Button
+                        size="small"
+                        appearance="primary"
+                        onClick={() => void quickRepair(item.repairKey)}
+                      >
+                        一键修复
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pre.attention?.length > 0 && (
+              <>
+                <div className="oc-usage-sub" style={{ marginTop: 10 }}>
+                  可以上课，但这些建议看一眼：
+                </div>
+                <div className="oc-list">
+                  {pre.attention.map((item: any) => (
+                    <div className="oc-list-row" key={item.id}>
+                      <div className="oc-list-main">
+                        <div className="oc-list-title">
+                          {item.title}：{item.summary}
+                        </div>
+                        {item.advice && <div className="oc-list-sub">建议：{item.advice}</div>}
+                      </div>
+                      {item.repairable && (
+                        <Button
+                          size="small"
+                          appearance="secondary"
+                          onClick={() => void quickRepair(item.repairKey)}
+                        >
+                          一键修复
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {pre.manual?.length > 0 && (
+              <div className="oc-usage-sub" style={{ marginTop: 8 }}>
+                需要人工处理：
+                {pre.manual.map((item: any) => item.title).join('、')}（软件无法代劳）
+              </div>
+            )}
+
+            {pre.errors?.length > 0 && (
+              <div className="oc-list-warn" style={{ marginTop: 8 }}>
+                有项目没能完成检测：{pre.errors.join('；')}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="oc-toolbar" style={{ marginBottom: 12 }}>
