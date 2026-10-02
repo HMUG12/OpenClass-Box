@@ -4,6 +4,14 @@ import { Button, Input, Switch, Spinner } from '@fluentui/react-components'
 import RemotePanel from '../components/RemotePanel'
 import { DesktopRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
 import { api } from '../api'
+import {
+  ACCENTS,
+  DEFAULT_APPEARANCE,
+  FONTS,
+  RADII,
+  applyAppearance,
+  type Appearance,
+} from '../looks'
 import type { ThemeMode } from '../types'
 
 interface Props {
@@ -59,6 +67,25 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [closeToTray, setCloseToTray] = useState(true)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+
+  // ── 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）──
+  // 与主题（浅色 / 深色 / 跟随系统）相互独立，两者叠加决定最终观感
+  const [appearance, setAppearance] = useState<Appearance>(DEFAULT_APPEARANCE)
+  const [lookMsg, setLookMsg] = useState('')
+
+  const chooseAppearance = async (patch: Partial<Appearance>) => {
+    const next = { ...appearance, ...patch }
+    // 先应用再落盘：界面立刻有反馈；万一写不进去，下面的提示会纠正
+    setAppearance(next)
+    applyAppearance(next)
+    setLookMsg('')
+    try {
+      const result = await api.set_appearance(patch)
+      if (result?.ok === false) setLookMsg('外观设置保存失败（数据目录不可写，重启后会恢复原样）')
+    } catch {
+      setLookMsg('外观设置保存失败')
+    }
+  }
 
   const [dataDir, setDataDir] = useState('')
   const [storage, setStorage] = useState<any>(null)
@@ -268,6 +295,12 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
           /* 开发预览模式忽略 */
         }
         void loadBackups()
+        try {
+          const look = await api.get_appearance()
+          setAppearance({ ...DEFAULT_APPEARANCE, ...(look ?? {}) })
+        } catch {
+          /* 开发预览模式忽略 */
+        }
       } catch {
         // 忽略：开发模式下拿不到真实值
       } finally {
@@ -532,6 +565,94 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
             <div className="oc-toolcard-desc">{o.desc}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── 外观自定义：配色 / 圆角 / 字号 / 毛玻璃 ── */}
+      <div className="oc-panel" style={{ marginTop: 12, marginBottom: 12 }}>
+        <div className="oc-panel-title">配色方案</div>
+        <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+          除默认的 Fluent 蓝外，另附几组明快的多巴胺色；只改强调色，不动文字对比度。
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {ACCENTS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              title={item.label}
+              aria-label={item.label}
+              onClick={() => void chooseAppearance({ accent: item.id })}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 9,
+                cursor: 'pointer',
+                background: item.color,
+                border:
+                  appearance.accent === item.id
+                    ? '2px solid var(--oc-text)'
+                    : '1px solid var(--oc-border)',
+              }}
+            />
+          ))}
+          <span className="oc-usage-sub">
+            {ACCENTS.find((a) => a.id === appearance.accent)?.label ?? '默认'}
+          </span>
+        </div>
+      </div>
+
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div className="oc-panel-title">圆角与字号</div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <div className="oc-usage-sub" style={{ marginBottom: 6 }}>
+              圆角
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {RADII.map((item) => (
+                <Button
+                  key={item.id}
+                  size="small"
+                  appearance={appearance.radius === item.id ? 'primary' : 'secondary'}
+                  onClick={() => void chooseAppearance({ radius: item.id })}
+                  title={item.desc}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="oc-usage-sub" style={{ marginBottom: 6 }}>
+              字号
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {FONTS.map((item) => (
+                <Button
+                  key={item.id}
+                  size="small"
+                  appearance={appearance.font === item.id ? 'primary' : 'secondary'}
+                  onClick={() => void chooseAppearance({ font: item.id })}
+                  title={item.desc}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{ borderTop: '1px solid var(--oc-border)', margin: '10px 0' }} />
+        <SwitchRow
+          label="毛玻璃效果"
+          desc="卡片半透明并带背景模糊；老显卡或集显机器若觉得发闷，可关掉"
+          checked={appearance.glass}
+          disabled={busy}
+          onChange={(checked) => void chooseAppearance({ glass: checked })}
+        />
+        {lookMsg && (
+          <div className="oc-list-warn" style={{ marginTop: 6 }}>
+            {lookMsg}
+          </div>
+        )}
       </div>
 
       <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>

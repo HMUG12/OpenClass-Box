@@ -39,6 +39,7 @@ import ClassroomPage from './pages/ClassroomPage'
 import ChatPage from './pages/ChatPage'
 import TasksPage from './pages/TasksPage'
 import ErrorBoundary from './components/ErrorBoundary'
+import { applyAppearance } from './looks'
 
 /**
  * 导航结构（已按使用习惯合并）：
@@ -85,13 +86,16 @@ export default function App() {
   const [version, setVersion] = useState('')
   const [hasUpdate, setHasUpdate] = useState(false)
 
-  // 外观：恢复成「只有主题（浅色 / 深色 / 跟随系统）」的老方案。
-  // 这里顺手清掉早期版本可能残留在 <html> 上的自定义属性，避免历史设置继续生效
+  // 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）：读取偏好并应用到根元素。
+  // 与主题（浅色 / 深色 / 跟随系统）相互独立，两者叠加决定最终观感
   useEffect(() => {
-    const root = document.documentElement
-    ;['data-accent', 'data-radius', 'data-font', 'data-glass'].forEach((key) =>
-      root.removeAttribute(key)
-    )
+    void (async () => {
+      try {
+        applyAppearance(await api.get_appearance())
+      } catch {
+        /* 开发预览模式忽略 */
+      }
+    })()
   }, [])
 
   // ── 密码保护：受保护页面进入前需要解锁 ──

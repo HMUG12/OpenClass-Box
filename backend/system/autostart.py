@@ -49,6 +49,13 @@ def current_command() -> str:
 
 
 def set_autostart(enabled: bool) -> bool:
+    """写入自启动设置，并**回读确认**是否真的生效。
+
+    为什么要多这一步：`SetValueEx` 不抛异常 ≠ 设置生效 —— 安全软件与组策略
+    常在写入后立刻把值删掉，旧实现只要没抛异常就返回成功，于是开关"显示已打开、
+    重启后没反应"。删除侧的异常还被 `pass` 吞掉，关不掉却显示已关闭 ——
+    这正是用户报告的"开机自启动这个有时点击无效"。
+    """
     if not winreg:
         return False
     try:
@@ -64,13 +71,17 @@ def set_autostart(enabled: bool) -> bool:
         else:
             try:
                 winreg.DeleteValue(key, APP_NAME)
+            except FileNotFoundError:
+                pass          # 本来就没有 = 已经是关闭状态，符合预期
             except OSError:
-                pass
-        return True
+                return False
     except OSError:
         return False
     finally:
         winreg.CloseKey(key)
+
+    # 回读：最终状态必须与目标一致（被安全软件改掉也能立刻发现）
+    return bool(current_command()) == enabled
 
 
 def is_autostart() -> bool:

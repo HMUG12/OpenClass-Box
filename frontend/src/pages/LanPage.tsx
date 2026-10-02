@@ -61,16 +61,13 @@ export default function LanPage() {
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(true)
 
-  const [scanResult, setScanResult] = useState<any[]>([])
-  const [scanning, setScanning] = useState(false)
-  const [serverUrl, setServerUrl] = useState('')
-  const [code, setCode] = useState('')
+  // 注：B 端「搜索服务端 / 加入」相关的 state 已移除 —— B 端只做被管理端，
+  // 接入入口统一收在「设置 → 被链接（B 端）」，
+  // 避免在一体机上被误点接到别的老师机
   const [messageText, setMessageText] = useState('')
   const [inbox, setInbox] = useState<any[]>([])
   const [collectPath, setCollectPath] = useState('')
-  const [receivePath, setReceivePath] = useState('')
   const [portInput, setPortInput] = useState('38900')
-  const [proxyInput, setProxyInput] = useState('')
   const [groupFilter, setGroupFilter] = useState('')
   const [schedule, setSchedule] = useState<any>(null)
   const [scheduleTime, setScheduleTime] = useState('08:00')
@@ -103,7 +100,8 @@ export default function LanPage() {
       notify('端口需在 1024–65535 之间')
       return
     }
-    const result = await api.lan_set_config(port, proxyInput.trim())
+    // 只改端口：代理是 B 端跨网段用的，在「设置 → 被链接（B 端）」里填
+    const result = await api.lan_set_config(port)
     notify(result?.message ?? '')
     await load(true)
   }
@@ -127,12 +125,11 @@ export default function LanPage() {
   const load = async (silent = false) => {
     if (!silent) setBusy(true)
     try {
-      const [s, n, e, box, recv, cfg, sch] = await Promise.all([
+      const [s, n, e, box, cfg, sch] = await Promise.all([
         api.lan_status(),
         api.lan_nodes(),
         api.lan_events(60),
         api.lan_inbox(),
-        api.lan_receive_dir(),
         api.lan_config(),
         api.lan_schedule(),
       ])
@@ -140,9 +137,7 @@ export default function LanPage() {
       setNodes(n ?? [])
       setEvents(e ?? [])
       setInbox(box ?? [])
-      setReceivePath(recv ?? '')
       setPortInput(String(cfg?.port ?? 38900))
-      setProxyInput(cfg?.proxy ?? '')
       setSchedule(sch)
       setScheduleTime(String(sch?.time ?? '08:00'))
       setScheduleAction(String(sch?.action ?? 'checkup'))
@@ -306,34 +301,6 @@ export default function LanPage() {
     await load(true)
   }
 
-  const doScan = async () => {
-    setScanning(true)
-    try {
-      const found = await api.lan_scan()
-      setScanResult(found ?? [])
-      notify(found?.length ? `发现 ${found.length} 台老师机` : '未发现老师机')
-    } finally {
-      setScanning(false)
-    }
-  }
-
-  const join = async (url = '') => {
-    const target = url || serverUrl
-    if (!code.trim()) {
-      notify('请填写老师机上显示的 6 位配对码')
-      return
-    }
-    const result = await api.lan_join(target, code.trim())
-    notify(result?.message ?? '')
-    await load(true)
-  }
-
-  const leave = async () => {
-    const result = await api.lan_leave()
-    notify(result?.message ?? '')
-    await load(true)
-  }
-
   const toggleSelect = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
   }
@@ -493,101 +460,9 @@ export default function LanPage() {
         )}
       </div>
 
-      {/* ── 学生机面板 ── */}
-      {mode !== 'teacher' && (
-        <div className="oc-panel" style={{ marginTop: 12 }}>
-          <div className="oc-panel-title">B 端 · 本体（加入服务端）</div>
-          {client?.state === 'connected' ? (
-            <>
-              <div className="oc-list-sub" style={{ marginTop: 6 }}>
-                已连接：{client.teacher}（{client.server}）· 节点 ID {client.nodeId}
-              </div>
-              <div className="oc-list-sub">最近上报：{formatTime(client.lastReport)}</div>
-              <div className="oc-list-sub">接收目录：{receivePath || '—'}</div>
-              <div className="oc-actions" style={{ marginTop: 10 }}>
-                <Button appearance="secondary" onClick={() => void api.lan_open_receive_dir()}>
-                  打开接收目录
-                </Button>
-                <Button appearance="secondary" onClick={leave}>
-                  断开连接
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="oc-searchbar" style={{ marginTop: 8, marginBottom: 8 }}>
-                <Input
-                  value={proxyInput}
-                  onChange={(_e, data) => setProxyInput(data.value)}
-                  placeholder="代理（可选，跨网段时填 http://IP:端口）"
-                  style={{ flex: 1 }}
-                />
-                <Button appearance="secondary" onClick={saveNetwork}>
-                  保存代理
-                </Button>
-              </div>
-              <div className="oc-searchbar" style={{ marginBottom: 8 }}>
-                <Button appearance="secondary" onClick={doScan} disabled={scanning}>
-                  {scanning ? '搜索中…' : '搜索服务端（A 端）'}
-                </Button>
-                {scanResult.length > 0 && (
-                  <span className="oc-list-sub">发现 {scanResult.length} 台，点击即填入</span>
-                )}
-              </div>
-              {scanResult.length > 0 && (
-                <div className="oc-list" style={{ marginBottom: 8 }}>
-                  {scanResult.map((item) => (
-                    <div className="oc-list-row" key={item.ip}>
-                      <div className="oc-list-main">
-                        <div className="oc-list-title">{item.name || item.ip}</div>
-                        <div className="oc-list-sub">
-                          {item.ip}:{item.httpPort ?? 38900}
-                        </div>
-                      </div>
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          setServerUrl(`http://${item.ip}:${item.httpPort ?? 38900}`)
-                          void join(`http://${item.ip}:${item.httpPort ?? 38900}`)
-                        }}
-                      >
-                        连接
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="oc-searchbar">
-                <Input
-                  value={serverUrl}
-                  onChange={(_e, data) => setServerUrl(data.value)}
-                  placeholder="老师机地址（可留空：自动发现）"
-                  style={{ flex: 1 }}
-                />
-                <Input
-                  value={code}
-                  onChange={(_e, data) => setCode(data.value)}
-                  placeholder="6 位配对码"
-                  style={{ width: 140 }}
-                />
-                <Button appearance="primary" onClick={() => void join()}>
-                  加入
-                </Button>
-                {client?.enabled && (
-                  <Button appearance="secondary" onClick={leave}>
-                    停止
-                  </Button>
-                )}
-              </div>
-              {client?.message && (
-                <div className="oc-list-sub" style={{ marginTop: 8 }}>
-                  状态：{client.message}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      {/* B 端不再有独立面板：本机是 B 端时上面已直接返回只读状态页；
+          单机模式下想接入老师机，走「设置 → 被链接（B 端）」——
+          入口唯一，避免在一体机上被误点接到别的老师机。 */}
 
       {msg && (
         <div className="oc-panel" style={{ marginTop: 12 }}>
