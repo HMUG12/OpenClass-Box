@@ -17,7 +17,9 @@
 """
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Any
 
 from .diag_result import (
@@ -153,7 +155,7 @@ def run() -> dict[str, Any]:
     verdict = "blocked" if blocking else ("attention" if others else "ready")
     issues = blocking + others
 
-    return {
+    result = {
         "ok": True,
         "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
         "verdict": verdict,
@@ -169,3 +171,52 @@ def run() -> dict[str, Any]:
         "summary": summarize(items),
         "errors": errors,
     }
+    _save(result)
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+# 上次结论（首页卡片）
+# ══════════════════════════════════════════════════════════════
+
+
+def _cache_path() -> Path:
+    from .paths import config_dir
+
+    return config_dir() / "preflight_last.json"
+
+
+def _save(result: dict[str, Any]) -> None:
+    """把结论留一份给首页 —— 存失败绝不影响本次结果返回。"""
+    try:
+        payload = {
+            "checkedAt": result.get("checkedAt", ""),
+            "verdict": result.get("verdict", ""),
+            "verdictLabel": result.get("verdictLabel", ""),
+            "headline": result.get("headline", ""),
+            "issueCount": int((result.get("summary") or {}).get("issueCount") or 0),
+            "blocking": [one.get("title", "") for one in result.get("blocking") or []],
+            "attention": [one.get("title", "") for one in result.get("attention") or []],
+        }
+        _cache_path().write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def last() -> dict[str, Any]:
+    """上次课前准备的结论（首页卡片用）。
+
+    为什么不在打开软件时自动跑：完整检查要十几秒（含课堂检测），
+    首页自动跑会让人以为软件卡住。所以先显示上次的结论与时间，
+    要新的再点一下 —— 老师也能看出这个结论有多旧。
+    """
+    empty = {"ok": False, "checkedAt": "", "verdict": "", "verdictLabel": "", "headline": ""}
+    try:
+        data = json.loads(_cache_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {**empty, "message": "还没有检查过"}
+    if not isinstance(data, dict) or not data.get("verdict"):
+        return {**empty, "message": "还没有检查过"}
+    return {"ok": True, **data}

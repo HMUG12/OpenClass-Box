@@ -35,6 +35,37 @@ export default function DashboardPage() {
   const [publicIp, setPublicIp] = useState<PublicIpResult | null>(null)
   const [querying, setQuerying] = useState(false)
 
+  // ── 课前准备：打开软件第一眼要知道"这台机器能不能上课" ──
+  // 不在加载时自动跑（完整检查含课堂检测要十几秒，会让人以为软件卡住），
+  // 先显示上次的结论与时间，要新的再点一下
+  const [pre, setPre] = useState<any>(null)
+  const [preBusy, setPreBusy] = useState(false)
+  const [preMsg, setPreMsg] = useState('')
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setPre(await api.preflight_last())
+      } catch {
+        /* 忽略：开发预览模式 */
+      }
+    })()
+  }, [])
+
+  const runPreflight = async () => {
+    setPreBusy(true)
+    setPreMsg('')
+    try {
+      const result = await api.preflight()
+      setPre(result)
+      if (result?.errors?.length) setPreMsg(`部分项目未完成：${result.errors.join('；')}`)
+    } catch {
+      setPreMsg('检查失败，请稍后重试')
+    } finally {
+      setPreBusy(false)
+    }
+  }
+
   // 静态信息与网络拓扑：加载一次即可
   useEffect(() => {
     void (async () => {
@@ -136,6 +167,43 @@ export default function DashboardPage() {
             {hardware.device?.user ? ` · ${hardware.device.user}` : ''}
           </div>
         </div>
+      </div>
+
+      {/* ── 课前准备：打开第一眼就知道能不能上课 ── */}
+      <div className="oc-panel" style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div className="oc-panel-title" style={{ marginBottom: 4 }}>
+              课前准备
+            </div>
+            {pre?.ok ? (
+              <>
+                <div className="oc-verdict-line">
+                  <span className={`oc-verdict-badge oc-${pre.verdict}`}>{pre.verdictLabel}</span>
+                  <span className="oc-usage-sub">{pre.headline}</span>
+                </div>
+                <div className="oc-usage-sub">上次检查：{pre.checkedAt}</div>
+              </>
+            ) : (
+              <div className="oc-usage-sub">
+                还没检查过。点一下，把体检、投影触摸、还原保护一起过一遍（约十几秒），
+                之后这里会一直显示最近一次的结论。
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Button appearance="primary" onClick={() => void runPreflight()} disabled={preBusy}>
+              {preBusy ? '检查中…' : pre?.ok ? '重新检查' : '检查一下'}
+            </Button>
+            {preMsg && <span className="oc-usage-sub">{preMsg}</span>}
+          </div>
+        </div>
+        {pre?.ok && (pre.blocking?.length > 0 || pre.attention?.length > 0) && (
+          <div className="oc-usage-sub" style={{ marginTop: 6 }}>
+            需要关注：
+            {[...(pre.blocking ?? []), ...(pre.attention ?? [])].join('、')}
+          </div>
+        )}
       </div>
 
       {/* ── 核心资源（圆环实时可视化） ── */}

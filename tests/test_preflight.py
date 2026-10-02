@@ -216,6 +216,46 @@ def test_mobile_enrich_uses_same_rules():
     assert "手机端仅体检" in enriched["scope"]
 
 
+# ── 上次结论（首页卡片）────────────────────────────────────
+
+
+def test_last_is_empty_before_any_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(pf, "_cache_path", lambda: tmp_path / "preflight_last.json")
+    data = pf.last()
+    assert data["ok"] is False
+    assert "还没有检查过" in data["message"]
+
+
+def test_run_saves_last(tmp_path, monkeypatch):
+    """首页显示的是上次结论，所以跑完必须留档（否则每次打开都是"还没检查过"）。"""
+    monkeypatch.setattr(pf, "_cache_path", lambda: tmp_path / "preflight_last.json")
+    _patch(monkeypatch)
+    result = pf.run()
+
+    saved = pf.last()
+    assert saved["ok"] is True
+    assert saved["verdict"] == result["verdict"]
+    assert saved["headline"] == result["headline"]
+    assert saved["checkedAt"] == result["checkedAt"]
+
+
+def test_last_survives_broken_file(tmp_path, monkeypatch):
+    """缓存被写坏（断电、磁盘问题）只当"没检查过"，绝不能抛错挡住首页。"""
+    path = tmp_path / "preflight_last.json"
+    monkeypatch.setattr(pf, "_cache_path", lambda: path)
+    path.write_text("{ 这不是合法 JSON", encoding="utf-8")
+    assert pf.last()["ok"] is False
+
+
+def test_save_failure_does_not_break_run(tmp_path, monkeypatch):
+    """写不进去（目录不存在 / 权限 / 磁盘满）也不能影响结论本身。"""
+    monkeypatch.setattr(pf, "_cache_path", lambda: tmp_path / "no" / "such" / "x.json")
+    _patch(monkeypatch)
+    result = pf.run()
+    assert result["ok"] is True
+    assert result["verdict"] in pf.VERDICTS
+
+
 def test_result_carries_summary_for_remote_and_mobile(monkeypatch):
     """手机端 / 远程汇总直接用这份结果：结论短、理由在、条目结构统一。"""
     _patch(

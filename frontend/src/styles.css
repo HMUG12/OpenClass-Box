@@ -1046,6 +1046,38 @@ button:active {
   margin: 0;
 }
 
+/* 首页课前准备：一行结论 + 一个小徽标（首页不该被色块占满） */
+.oc-verdict-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.oc-verdict-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.oc-verdict-badge.oc-ready {
+  background: rgba(16, 124, 16, 0.14);
+  color: #107c10;
+}
+
+.oc-verdict-badge.oc-attention {
+  background: rgba(255, 140, 0, 0.18);
+  color: #9a6700;
+}
+
+.oc-verdict-badge.oc-blocked {
+  background: rgba(209, 52, 56, 0.16);
+  color: #c50f1f;
+}
+
 /* 课前准备结论：颜色只表达"能不能上课"，不铺满整屏 —— 老师要看的是那行字 */
 .oc-verdict {
   padding: 14px 16px;

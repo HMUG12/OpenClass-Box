@@ -586,6 +586,12 @@ class Api:
 
         return run()
 
+    def preflight_last(self) -> dict[str, Any]:
+        """上次课前准备的结论（首页卡片用）—— 只读缓存，不触发检测。"""
+        from .core.preflight import last
+
+        return last()
+
     @timed("生成诊断报告")
     def diagnostic_report(self) -> dict[str, Any]:
         """统一诊断报告：体检 + 课堂检测 + 维护清单 → 同一形状 + 可直接粘贴的报修文本。

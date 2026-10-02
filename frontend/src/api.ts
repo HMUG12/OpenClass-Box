@@ -119,6 +119,7 @@ export interface OcApi {
   config_backup_restore(name: string): Promise<any>
   diagnostic_report(): Promise<any>
   preflight(): Promise<any>
+  preflight_last(): Promise<any>
   report_frontend_error(message: string): Promise<any>
   frontend_ready(): Promise<any>
   get_startup_mode(): Promise<string>
@@ -445,6 +446,9 @@ const MOCK_API: OcApi = {
   },
   async config_backup_restore() {
     return { ok: false, message: '开发预览模式：未执行真实恢复' }
+  },
+  async preflight_last() {
+    return { ok: false, checkedAt: '', verdict: '', verdictLabel: '', headline: '', message: '还没有检查过' }
   },
   async preflight() {
     return {
