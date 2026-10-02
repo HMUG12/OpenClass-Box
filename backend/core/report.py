@@ -20,7 +20,40 @@ try:
 except ImportError:
     psutil = None
 
+from .diag_result import from_health, only_issues, summarize
 from .health import run_checks
+
+# 报告里排在最前的两段：维修人员通常只看这两段，硬件明细是备查的
+_PRIORITY_KEYS = ("诊断结论", "需要处理")
+
+# 虚拟网络适配器：虚拟机 / Hyper-V / 隧道软件装的。
+# 它们会把"这台机器连在哪"淹没在一堆 172.x 地址里，所以标记出来排到后面；
+# 但**不能直接丢**——有时问题恰恰出在 VPN 或虚拟网卡上。
+_VIRTUAL_ADAPTER_HINTS = (
+    "vmware",
+    "virtualbox",
+    "vbox",
+    "hyper-v",
+    "vethernet",
+    "virtual",
+    "tailscale",
+    "zerotier",
+    "docker",
+    "wsl",
+    "loopback",
+    "npcap",
+    "tap-",
+    "openvpn",
+    "wireguard",
+    "easyconnect",
+    "sangfor",
+    "vpn",
+)
+
+
+def _is_virtual_adapter(name: str) -> bool:
+    lowered = (name or "").lower()
+    return any(hint in lowered for hint in _VIRTUAL_ADAPTER_HINTS)
 
 
 def _gb(value: float) -> str:
@@ -82,7 +115,8 @@ def collect() -> dict[str, Any]:
             )
         data["磁盘"] = disks
 
-        nets: list[str] = []
+        physical: list[str] = []
+        virtual: list[str] = []
         addrs = psutil.net_if_addrs()
         for name, stat in psutil.net_if_stats().items():
             if not stat.isup:
@@ -92,12 +126,28 @@ def collect() -> dict[str, Any]:
                 for a in addrs.get(name, [])
                 if a.family == socket.AF_INET and not a.address.startswith("127.")
             ]
-            if ipv4:
-                nets.append(f"{name}：{', '.join(ipv4)}")
-        data["网络"] = nets
+            if not ipv4:
+                continue
+            line = f"{name}：{', '.join(ipv4)}"
+            # 物理网卡排前面：维修人员要看的是"这台机器连在哪"
+            (virtual if _is_virtual_adapter(name) else physical).append(line)
+        data["网络"] = physical + [f"{line}（虚拟适配器）" for line in virtual]
 
     health = run_checks()
-    data["体检结果"] = [
+    unified = health.get("unified") or from_health(health.get("items") or [])
+    info = summarize(unified)
+
+    # 结论与"要处理的事"是维修人员最先看的两段（render_text 会把它排到最前）
+    data["诊断结论"] = info["headline"]
+    issues = only_issues(unified)
+    if issues:
+        data["需要处理"] = [
+            f"[{one['statusLabel']}] {one['title']}：{one['summary']}"
+            + (f"｜怎么办：{one['advice']}" if one.get("advice") else "")
+            + ("（需人工/报修）" if one.get("manual") else "")
+            for one in issues
+        ]
+    data["体检明细"] = [
         f"{'正常' if item['ok'] else '异常'}｜{item['name']}：{item['detail']}"
         for item in health["items"]
     ]
@@ -105,10 +155,19 @@ def collect() -> dict[str, Any]:
 
 
 def render_text(data: dict[str, Any]) -> str:
-    """渲染为整齐的纯文本报告。"""
+    """渲染为整齐的纯文本报告。
+
+    顺序上把「诊断结论 / 需要处理」提到最前：维修人员最需要先看到这两段，
+    硬件明细放后面备查。
+    """
     lines = ["=" * 48, "OpenClass-Box 报修信息报告", "=" * 48]
 
-    for key, value in data.items():
+    ordered: dict[str, Any] = {
+        key: data[key] for key in _PRIORITY_KEYS if key in data
+    }
+    ordered.update({key: value for key, value in data.items() if key not in _PRIORITY_KEYS})
+
+    for key, value in ordered.items():
         if key == "生成时间":
             continue
         lines.append("")

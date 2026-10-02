@@ -1046,6 +1046,24 @@ button:active {
   margin: 0;
 }
 
+/* 可粘贴报告预览：等宽、自动换行、可滚动。
+   老师的用法是"看一眼、复制、发出去"，所以中文断行与滚动都要顺手 */
+.oc-report-preview {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Consolas, 'Courier New', ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--oc-text);
+  background: var(--oc-bg-soft, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--oc-border);
+  border-radius: 10px;
+}
+
 /* ── 信息表（关于页 / 硬件页共用） ── */
 
 .oc-info-grid {

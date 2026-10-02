@@ -397,6 +397,11 @@ def scan() -> dict[str, Any]:
 
     actions.sort(key=lambda item: _ORDER.index(item["level"]))
 
+    # 统一结果（并列产物）：与体检、课堂检测同一形状，界面与报修报告共用
+    from .diag_result import from_watch, summarize
+
+    unified = from_watch(actions)
+
     worst = "ok"
     for item in actions:
         if _ORDER.index(item["level"]) < _ORDER.index(worst):
@@ -412,6 +417,8 @@ def scan() -> dict[str, Any]:
         "cpu": cpu,
         "restore": restore,
         "actions": actions,
+        "unified": unified,
+        "unifiedSummary": summarize(unified),
         "counts": {
             "replace": sum(1 for a in actions if a["level"] == "replace"),
             "warn": sum(1 for a in actions if a["level"] == "warn"),

@@ -576,6 +576,59 @@ class Api:
 
         return report()
 
+    @timed("生成诊断报告")
+    def diagnostic_report(self) -> dict[str, Any]:
+        """统一诊断报告：体检 + 课堂检测 + 维护清单 → 同一形状 + 可直接粘贴的报修文本。
+
+        与「一键体检」的区别：体检只回答"现在能不能上课"；这份报告把所有检测
+        汇到一起，并生成给维修人员看的文字 —— 老师报修用的是微信/钉钉，要的
+        是能直接粘过去的一段话，不是一个需要对方装工具才能看的文件。
+
+        会真实执行各项检测（几秒到几十秒），由用户点击触发。
+        """
+        import platform as _platform
+        import time as _time
+
+        from .core.diag_result import (
+            from_classroom,
+            from_health,
+            from_watch,
+            summarize,
+            to_report,
+        )
+
+        sections: dict[str, list[dict[str, Any]]] = {}
+        try:
+            from .core.health import run_checks
+
+            sections["一键体检"] = from_health(run_checks().get("items") or [])
+        except Exception:
+            sections["一键体检"] = []
+        try:
+            from .core.classroom import report as _classroom
+
+            sections["课堂检测"] = from_classroom(_classroom().get("items") or [])
+        except Exception:
+            sections["课堂检测"] = []
+        try:
+            from .core.health_watch import scan
+
+            sections["维护清单"] = from_watch(scan().get("actions") or [])
+        except Exception:
+            sections["维护清单"] = []
+
+        everything = [one for group in sections.values() for one in group]
+        return {
+            "ok": True,
+            "generatedAt": _time.strftime("%Y-%m-%d %H:%M:%S"),
+            "sections": sections,
+            "summary": summarize(everything),
+            "report": to_report(
+                sections,
+                machine=f"{_platform.node()}（{_platform.system()} {_platform.release()}）",
+            ),
+        }
+
     def refresh_teaching_apps(self) -> dict[str, Any]:
         """强制重新扫描教学软件（跳过 5 分钟缓存）。"""
         from .core.classroom import teaching_apps

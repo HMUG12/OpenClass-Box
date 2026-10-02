@@ -11,6 +11,12 @@ export default function HealthPage() {
   const [exporting, setExporting] = useState(false)
   const [reportPath, setReportPath] = useState('')
 
+  // 完整报告：体检 + 课堂检测 + 维护清单汇总成一段可粘贴的文字
+  const [fullReport, setFullReport] = useState('')
+  const [reportBusy, setReportBusy] = useState(false)
+  const [reportNote, setReportNote] = useState('')
+  const [copied, setCopied] = useState(false)
+
   useEffect(() => {
     void api
       .list_repairs()
@@ -39,6 +45,32 @@ export default function HealthPage() {
       setMsg('执行失败，请稍后重试')
     } finally {
       setRunning('')
+    }
+  }
+
+  const makeFullReport = async () => {
+    setReportBusy(true)
+    setCopied(false)
+    setReportNote('')
+    try {
+      const outcome = await api.diagnostic_report()
+      setFullReport(outcome?.report ?? '')
+      setReportNote(outcome?.summary?.headline ?? '')
+    } catch {
+      setFullReport('')
+      setReportNote('生成失败，请稍后重试')
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(fullReport)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setReportNote('复制失败：请手动选中上面这段文字复制')
     }
   }
 
@@ -116,10 +148,35 @@ export default function HealthPage() {
           >
             {exporting ? '正在生成…' : '导出报修报告'}
           </Button>
+          <Button
+            size="small"
+            appearance="secondary"
+            onClick={() => void makeFullReport()}
+            disabled={reportBusy}
+          >
+            {reportBusy ? '正在汇总…' : '生成完整报告'}
+          </Button>
         </div>
         {reportPath && (
           <div className="oc-list-sub" style={{ marginTop: 8, textAlign: 'center' }}>
             已保存到：{reportPath}
+          </div>
+        )}
+
+        {fullReport && (
+          <div style={{ marginTop: 12 }}>
+            <div
+              className="oc-actions"
+              style={{ justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <span className="oc-usage-sub">
+                {reportNote || '把下面这段直接发给维修人员即可'}
+              </span>
+              <Button size="small" appearance="primary" onClick={() => void copyReport()}>
+                {copied ? '已复制' : '复制全文'}
+              </Button>
+            </div>
+            <pre className="oc-report-preview">{fullReport}</pre>
           </div>
         )}
       </div>

@@ -424,8 +424,14 @@ def report() -> dict[str, Any]:
                 results[key] = _item(key, key, True, f"检测失败：{exc}", "")
 
     items = [results[k] for k in ("screen", "touch", "wireless", "apps", "restore") if k in results]
+    # 统一结果（并列产物）：与体检、维护清单同一形状
+    from .diag_result import from_classroom, summarize
+
+    unified = from_classroom(items)
     return {
         "items": items,
         "apps": results.get("apps", {}).get("items", []),
         "total": len(items),
+        "unified": unified,
+        "unifiedSummary": summarize(unified),
     }

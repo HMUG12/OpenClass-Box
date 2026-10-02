@@ -117,9 +117,16 @@ def run_checks() -> dict[str, Any]:
         _check_memory(),
     ]
     ok_count = sum(1 for i in items if i["ok"])
+    # 统一结果（并列产物，旧字段一律保留）：界面卡片 / 报修报告 / 远程汇总
+    # 从此共用同一形状，前端不必为每种检测各写一遍渲染
+    from .diag_result import from_health, summarize
+
+    unified = from_health(items)
     return {
         "items": items,
         "okCount": ok_count,
         "total": len(items),
         "healthy": ok_count == len(items),
+        "unified": unified,
+        "unifiedSummary": summarize(unified),
     }
