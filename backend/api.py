@@ -1209,10 +1209,21 @@ class Api:
         return status()
 
     def firewall_allow(self) -> dict[str, Any]:
-        """一次放行全部需要的端口（管理员权限，弹 UAC）。"""
+        """一次放行全部需要的端口（管理员权限，弹 UAC）。
+
+        执行后会**复核规则是否真的加上**再返回结果 —— 旧版只要提权进程起得来
+        就报成功，用户在 UAC 上点"否"也显示成功，于是"点了放行还是连不上"。
+        """
         from .core.firewall import allow
 
         return allow()
+
+    def firewall_set_private(self) -> dict[str, Any]:
+        """把当前网络改为「专用」—— 教室网络常被 Windows 识别成"公用"，
+        而放行规则只对专用/域网络生效（这是"放行了却还连不上"的常见原因）。"""
+        from .core.firewall import set_private
+
+        return set_private()
 
     def firewall_revoke(self) -> dict[str, Any]:
         """撤销放行规则。"""

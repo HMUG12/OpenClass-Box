@@ -186,6 +186,7 @@ export interface OcApi {
   clear_url_cache(): Promise<any>
   firewall_status(): Promise<any>
   firewall_allow(): Promise<any>
+  firewall_set_private(): Promise<any>
   firewall_revoke(): Promise<any>
   passcode_status(): Promise<any>
   passcode_check(page: string): Promise<any>
@@ -570,6 +571,7 @@ const MOCK_API: OcApi = {
     return { supported: true, allowed: false, tcp: false, udp: false, ports: [38610, 38620, 38900], discoveryPort: 38901, rules: [], message: '开发预览模式' }
   },
   async firewall_allow() { return { ok: false, message: '开发预览模式' } },
+  async firewall_set_private() { return { ok: false, message: '开发预览模式' } },
   async firewall_revoke() { return { ok: false, message: '开发预览模式' } },
   async passcode_status() { return { enabled: false, protected: [], unlocked: true, pages: {}, hint: '' } },
   async passcode_check() { return { page: '', need: false } },

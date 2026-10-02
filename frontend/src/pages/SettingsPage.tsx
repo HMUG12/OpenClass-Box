@@ -799,8 +799,9 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
               setBusy(true)
               try {
                 const result = await api.firewall_allow()
+                // 后端已复核规则是否真的加上，直接刷新即可（不再盲等 3 秒）
                 setConsoleMsg(result?.message ?? '')
-                window.setTimeout(() => void loadFw(), 3000)
+                await loadFw()
               } finally {
                 setBusy(false)
               }
@@ -837,6 +838,45 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
                 : fw?.message || '读取中…'}
           </span>
         </div>
+
+        {/* 网络类别：规则只对专用 / 域生效，而教室网络常被识别成"公用"。
+            这一条不显示出来，用户就会反复点放行却始终连不上 */}
+        {fw?.categories?.length > 0 && (
+          <div className="oc-info-row" style={{ marginTop: 8 }}>
+            <span>当前网络</span>
+            <span>
+              {fw.categories.join(' / ')}
+              {fw.onlyPublic ? '（规则不会生效）' : ''}
+            </span>
+          </div>
+        )}
+        {fw?.onlyPublic && (
+          <>
+            <div className="oc-list-warn" style={{ marginTop: 6 }}>
+              规则已加，但当前网络被识别为「公用」—— Windows 不会应用放行规则，
+              手机与学生机仍然连不上。
+            </div>
+            <div className="oc-actions" style={{ marginTop: 8 }}>
+              <Button
+                size="small"
+                appearance="primary"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  try {
+                    const result = await api.firewall_set_private()
+                    setConsoleMsg(result?.message ?? '')
+                    await loadFw()
+                  } finally {
+                    setBusy(false)
+                  }
+                }}
+              >
+                把当前网络改为专用
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
