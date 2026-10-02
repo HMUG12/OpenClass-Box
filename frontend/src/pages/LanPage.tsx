@@ -163,6 +163,31 @@ export default function LanPage() {
   const client = status?.client
   const onlineNodes = nodes.filter((node) => node.online)
 
+  // ── 远程电源控制（危险操作：默认关闭、延迟执行、二次确认）──
+  //
+  // 这三个 hook 必须放在下面的 early return **之前**。hook 只能在无条件分支里
+  // 调用，而本组件在 B 端模式下会提前返回 —— 把它们留在 return 之后，同一个
+  // 组件两次渲染的 hook 数量就不一致（React error #300，页面直接崩）。
+  // B 端模式下这个面板根本不渲染，所以 effect 里直接跳过加载。
+  const [powerStatus, setPowerStatus] = useState<any>(null)
+  const [powerDelay, setPowerDelay] = useState(30)
+
+  const loadPower = async () => {
+    try {
+      const data = await api.power_control_status()
+      setPowerStatus(data)
+      setPowerDelay(Number(data?.defaultDelay) || 30)
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  useEffect(() => {
+    if (mode === 'student') return
+    void loadPower()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
   // B 端（被管理端）：只展示"被谁管理 + 连接状态"。
   // B 端不提供主动连接别的机器，连接配置统一收在「设置 → 被链接（B 端）」，
   // 避免学生在一体机上乱点把机器接到错误的老师机。
@@ -258,24 +283,6 @@ export default function LanPage() {
     notify(`新的配对码：${value}`)
     await load(true)
   }
-
-  // ── 远程电源控制（危险操作：默认关闭、延迟执行、二次确认）──
-  const [powerStatus, setPowerStatus] = useState<any>(null)
-  const [powerDelay, setPowerDelay] = useState(30)
-
-  const loadPower = async () => {
-    try {
-      const data = await api.power_control_status()
-      setPowerStatus(data)
-      setPowerDelay(Number(data?.defaultDelay) || 30)
-    } catch {
-      /* 忽略 */
-    }
-  }
-
-  useEffect(() => {
-    void loadPower()
-  }, [])
 
   const doPower = async (action: string, name: string, danger: boolean) => {
     if (!selected.length) {
