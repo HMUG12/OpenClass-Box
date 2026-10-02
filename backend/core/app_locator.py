@@ -83,18 +83,27 @@ _APP_TO_TOOL: dict[str, str] = {
     "openoffice": "openoffice",
 }
 
-# 扩展名 → 应用名（用于右键「打开方式」/双击路由）
-FILE_ROUTES: dict[str, str] = {
-    ".zip": "7zip", ".7z": "7zip", ".rar": "7zip", ".tar": "7zip",
-    ".gz": "7zip", ".bz2": "7zip", ".xz": "7zip", ".iso": "7zip", ".001": "7zip",
-    ".mp4": "vlc", ".mkv": "vlc", ".avi": "vlc", ".mov": "vlc", ".flv": "vlc",
-    ".wmv": "vlc", ".mpg": "vlc", ".mpeg": "vlc", ".webm": "vlc",
-    ".mp3": "vlc", ".flac": "vlc", ".wav": "vlc", ".m4a": "vlc",
-    ".aac": "vlc", ".ogg": "vlc", ".wma": "vlc", ".ape": "vlc",
-    ".doc": "libreoffice", ".docx": "libreoffice", ".xls": "libreoffice",
-    ".xlsx": "libreoffice", ".ppt": "libreoffice", ".pptx": "libreoffice",
-    ".odt": "libreoffice", ".ods": "libreoffice", ".odp": "libreoffice",
-    ".rtf": "libreoffice", ".csv": "libreoffice", ".pdf": "libreoffice",
+# 扩展名 → **候选应用**（按本机实际可用性挑第一个能用的）
+#
+# 这里以前是一对一硬编码（比如 .docx 固定给 libreoffice）。问题是各机房装的
+# 东西不一样：学校里多半是 WPS 或 MS Office，随包带的又常是 OpenOffice ——
+# 硬编码的那个没装，用户看到的就是"点了没反应"，而这恰恰最容易被当成软件坏了。
+# 改成候选列表后，装了哪个就用哪个；一个都没有时由调用方明确告知还缺什么。
+FILE_ROUTES: dict[str, tuple[str, ...]] = {
+    ".zip": ("7zip",), ".7z": ("7zip",), ".rar": ("7zip",), ".tar": ("7zip",),
+    ".gz": ("7zip",), ".bz2": ("7zip",), ".xz": ("7zip",), ".iso": ("7zip",), ".001": ("7zip",),
+    ".mp4": ("vlc",), ".mkv": ("vlc",), ".avi": ("vlc",), ".mov": ("vlc",), ".flv": ("vlc",),
+    ".wmv": ("vlc",), ".mpg": ("vlc",), ".mpeg": ("vlc",), ".webm": ("vlc",),
+    ".mp3": ("vlc",), ".flac": ("vlc",), ".wav": ("vlc",), ".m4a": ("vlc",),
+    ".aac": ("vlc",), ".ogg": ("vlc",), ".wma": ("vlc",), ".ape": ("vlc",),
+    ".doc": ("libreoffice", "openoffice"), ".docx": ("libreoffice", "openoffice"),
+    ".xls": ("libreoffice", "openoffice"), ".xlsx": ("libreoffice", "openoffice"),
+    ".ppt": ("libreoffice", "openoffice"), ".pptx": ("libreoffice", "openoffice"),
+    ".odt": ("libreoffice", "openoffice"), ".ods": ("libreoffice", "openoffice"),
+    ".odp": ("libreoffice", "openoffice"), ".rtf": ("libreoffice", "openoffice"),
+    ".csv": ("libreoffice", "openoffice"),
+    # OpenOffice 不能打开 PDF，所以只列 LibreOffice
+    ".pdf": ("libreoffice",),
 }
 
 
@@ -292,10 +301,35 @@ def find_app(name: str) -> Optional[Path]:
     return None
 
 
+def _app_available(app: str) -> bool:
+    """该应用当前是否可用（能定位到可执行文件）。"""
+    return find_app(app) is not None
+
+
 def route_file(path: str | os.PathLike) -> Optional[str]:
-    """根据文件扩展名返回应使用的工具 id；无匹配返回 None。"""
+    """按扩展名挑一个**本机真的能用**的集成套件；一个都用不了返回 None。
+
+    与旧实现的区别：旧的是"查表得到唯一答案"，现在是"在候选里找第一个
+    真正装了的"。这样同一份配置在不同机房都能工作。
+    """
     suffix = Path(path).suffix.lower()
-    app = FILE_ROUTES.get(suffix)
-    if not app:
-        return None
-    return _APP_TO_TOOL.get(app)
+    for app in FILE_ROUTES.get(suffix, ()):
+        tool_id = _APP_TO_TOOL.get(app)
+        if tool_id and _app_available(app):
+            return tool_id
+    return None
+
+
+def route_candidates(path: str | os.PathLike) -> list[str]:
+    """该文件类型**支持**的集成套件 id（不判断是否已安装）。
+
+    给"这台机器上还没有能打开它的套件"这类提示用：告诉用户有哪些可选，
+    比只说一句"失败"有用得多。
+    """
+    suffix = Path(path).suffix.lower()
+    result: list[str] = []
+    for app in FILE_ROUTES.get(suffix, ()):
+        tool_id = _APP_TO_TOOL.get(app)
+        if tool_id and tool_id not in result:
+            result.append(tool_id)
+    return result

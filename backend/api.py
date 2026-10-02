@@ -1697,12 +1697,29 @@ class Api:
         「双击文件没反应」是最容易被当成 bug 的体验问题：右键打开方式时窗口
         通常不在前台，光返回一个 message 用户根本看不到。所以失败（以及成功）
         都额外弹一次系统托盘提示，确保有反馈。
+
+        失败要分清两种，因为下一步完全不同：
+          · 这种文件类型不支持 → 没什么可做的（直接说类型）；
+          · 支持但本机没装对应套件 → **去「工具」页装一个就行**（告诉他装哪个）。
         """
-        from .core.app_locator import route_file
+        from .core.app_locator import route_candidates, route_file
 
         tool_id = route_file(path)
         if not tool_id:
-            message = f"暂不支持以集成套件打开该类型：{Path(path).suffix or '（无扩展名）'}"
+            suffix = Path(path).suffix.lower() or "（无扩展名）"
+            candidates = route_candidates(path)
+            if candidates:
+                from .registry import registry
+
+                names = "、".join(
+                    str(getattr(registry.get(cid), "name", "") or cid) for cid in candidates
+                )
+                message = (
+                    f"这台机器上还没有能打开 {suffix} 的集成套件"
+                    f"（可用：{names}）。到「工具」页安装其中一个后再试。"
+                )
+            else:
+                message = f"暂不支持以集成套件打开该类型：{suffix}"
             self._notify("打开方式", message)
             return {"ok": False, "message": message}
 
