@@ -52,6 +52,16 @@ ITERATIONS = 200_000
 # 需要二次确认的动作：值必须原样等于这个字符串才算确认
 CONFIRM_TOKEN = "POWER"
 
+# 允许「公网来源访问」时**只保留只读能力**。
+#
+# 理由不是"怕用户误点"这么轻：这台服务的鉴权强度是**局域网工具级别**的
+# （访问码 + 会话过期 + 失败锁定），HTTP 明文、没有 TLS。它一旦被推到公网，
+# 就等于把"批量关机""下发文件""清磁盘"这些能力挂在了一个可能被猜到或被撞库的
+# 入口上。所以选择：宁可少功能，也不把这份信任押在用户的自觉上。
+#
+# 只读的两项：体检（读本机数据）与弹消息（不落盘、不改系统状态）。
+PUBLIC_ALLOWED_ACTIONS = ("checkup", "message")
+
 # 电源动作白名单（与 net/proto.py 的 power payload.mode 对齐）
 POWER_MODES = {
     "shutdown": "关机",
@@ -247,6 +257,8 @@ def summary() -> dict[str, Any]:
         "powerModes": POWER_MODES,
         "actions": list(_actions()),
         "safeTest": safe_test(),
+        # 公网模式下前端要把界面标成"只读"，否则用户会以为按钮坏了
+        "publicMode": allow_public(),
         "serverTime": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -277,6 +289,23 @@ def _power_allowed() -> bool:
         return False
 
 
+def _public_block(action: str) -> dict[str, Any] | None:
+    """公网可达时拦下非只读动作；不需要拦则返回 None。
+
+    集中在一处，避免"dispatch 拦了、push_file 忘了"这种漏网 —— 后者恰好
+    是危害最大的一项（把文件送到任意一台机器上）。
+    """
+    if not allow_public() or action in PUBLIC_ALLOWED_ACTIONS:
+        return None
+    return {
+        "ok": False,
+        "message": (
+            "已允许公网访问，此时只能执行只读操作（体检 / 弹消息）。"
+            "电源控制、文件下发、磁盘清理等请回到局域网内操作。"
+        ),
+    }
+
+
 def dispatch(
     action: str,
     node_ids: list[str],
@@ -293,6 +322,11 @@ def dispatch(
         return {"ok": False, "message": f"不支持的指令：{action}"}
     if not node_ids:
         return {"ok": False, "message": "请先选择要操作的设备"}
+
+    blocked = _public_block(action)
+    if blocked:
+        _note(action, f"{len(node_ids)} 台", False, source, "公网模式下已拦截")
+        return blocked
 
     if action == "power":
         mode = str(payload.get("mode") or "").lower()
@@ -341,6 +375,11 @@ def push_file(node_ids: list[str], path: str, source: str = "") -> dict[str, Any
     target = Path(path)
     if not target.is_file():
         return {"ok": False, "message": "文件不存在"}
+
+    blocked = _public_block("push_file")
+    if blocked:
+        _note("push_file", target.name, False, source, "公网模式下已拦截")
+        return blocked
     server = _lan()
     result = server.push_file([str(n) for n in (node_ids or [])], str(target))
     _note("push_file", f"{target.name} → {len(node_ids or [])} 台", bool(result.get("ok")), source)
@@ -490,19 +529,31 @@ def _make_handler():
             pass
 
         # ── 工具 ──
-        def _send(self, code: int, body: bytes, content_type: str = "application/json; charset=utf-8"):
+        def _send(
+            self,
+            code: int,
+            body: bytes,
+            content_type: str = "application/json; charset=utf-8",
+            headers: list[tuple[str, str]] | None = None,
+        ):
             self.send_response(code)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            # 这台服务可以被推到公网：禁掉 MIME 嗅断、不外泄 Referer
+            # （后者在凭据走 URL 时是实打实的泄露渠道）
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            for key, value in headers or ():
+                self.send_header(key, value)
             self.end_headers()
             try:
                 self.wfile.write(body)
             except OSError:
                 pass
 
-        def _json(self, code: int, data: dict[str, Any]):
-            self._send(code, json.dumps(data, ensure_ascii=False).encode("utf-8"))
+        def _json(self, code: int, data: dict[str, Any], headers: list[tuple[str, str]] | None = None):
+            self._send(code, json.dumps(data, ensure_ascii=False).encode("utf-8"), headers=headers)
 
         def _source(self) -> str:
             return str(self.client_address[0] if self.client_address else "")
@@ -530,9 +581,15 @@ def _make_handler():
             return data if isinstance(data, dict) else {}
 
         def _token(self) -> str:
-            token = self._query().get("token", "")
-            if token:
-                return token
+            """访问令牌：Cookie 优先，其次 X-OCB-Token 头；**不再接受 URL 参数**。
+
+            URL 里的凭据会进浏览器历史、Referer 和网关日志 —— 这台服务可以
+            被推到公网，所以不能让"钥匙"出现在地址栏里。
+            """
+            for part in (self.headers.get("Cookie") or "").split(";"):
+                name, _, value = part.strip().partition("=")
+                if name == "ocb_token" and value:
+                    return value
             return str(self.headers.get("X-OCB-Token") or "")
 
         # ── 路由 ──
@@ -611,7 +668,12 @@ def _make_handler():
             if path == "/api/logout":
                 with _lock:
                     _tokens.pop(self._token(), None)
-                self._json(200, {"ok": True, "message": "已退出"})
+                # 同时把 cookie 清掉：只删服务端会话、却把凭据留在浏览器里没有意义
+                self._json(
+                    200,
+                    {"ok": True, "message": "已退出"},
+                    [("Set-Cookie", "ocb_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0")],
+                )
                 return
 
             self._json(404, {"ok": False, "message": "not found"})
@@ -647,7 +709,13 @@ def _make_handler():
                 _fails.pop(source, None)
                 token = _new_token()
                 _note("login", "管理端登录", True, source)
-                self._json(200, {"ok": True, "token": token, "ttl": SESSION_TTL})
+                # 凭据只进 httpOnly cookie：页面 JS 拿不到，XSS 也偷不走；
+                # SameSite=Strict 让它不会随跨站请求发出（缓解 CSRF）
+                self._json(
+                    200,
+                    {"ok": True, "ttl": SESSION_TTL},
+                    [("Set-Cookie", f"ocb_token={token}; HttpOnly; SameSite=Strict; Path=/")],
+                )
                 return
             _note_fail(source)
             _note("login", "访问码错误", False, source)
@@ -816,7 +884,13 @@ PAGE = r"""<!DOCTYPE html>
 
 <script>
 (function () {
-  var token = localStorage.getItem('ocb-remote-token') || '';
+  /* 凭据由服务端以 httpOnly cookie 下发：页面 JS 拿不到、也不需要 token ——
+     即使页面里出现 XSS，也偷不走凭据（token 放 localStorage 时是可以的）。 */
+  function esc(v) {
+    return String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
   var nodes = [];
   var selected = {};
 
@@ -829,7 +903,6 @@ PAGE = r"""<!DOCTYPE html>
   function api(path, options) {
     options = options || {};
     options.headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
-    if (token) options.headers['X-OCB-Token'] = token;
     return fetch(path, options).then(function (r) {
       return r.json().then(function (data) { return { status: r.status, data: data }; });
     });
@@ -840,8 +913,6 @@ PAGE = r"""<!DOCTYPE html>
     if (!code) { show(q('loginMsg'), '请输入访问码', 'err'); return; }
     api('/api/login', { method: 'POST', body: JSON.stringify({ code: code }) }).then(function (res) {
       if (res.data && res.data.ok) {
-        token = res.data.token;
-        localStorage.setItem('ocb-remote-token', token);
         enter();
       } else {
         show(q('loginMsg'), (res.data && res.data.message) || '登录失败', 'err');
@@ -869,7 +940,10 @@ PAGE = r"""<!DOCTYPE html>
       q('pairInfo').textContent = 'A 端服务：' + (d.serverRunning ? '运行中' : '未启动')
         + (d.pairingCode ? ' · 配对码 ' + d.pairingCode : '')
         + (d.tunnel && d.tunnel.running ? ' · 穿透 ' + (d.tunnel.url || '已连接') : '');
-      q('statusLine').textContent = d.safeTest ? '⚠ 安全测试模式：电源操作不会真正下发' : '';
+      q('statusLine').textContent =
+        (d.safeTest ? '⚠ 安全测试模式：电源操作不会真正下发' : '')
+        + (d.publicMode ? ' · 公网访问已开启：当前仅只读（体检 / 弹消息），电源控制与文件下发已锁定'
+           : '');
       renderNodes();
       renderActions(d);
       renderPower(d);
@@ -898,13 +972,15 @@ PAGE = r"""<!DOCTYPE html>
       var health = metrics.health || {};
       var bad = node.online && health.level && health.level !== 'ok';
       var healthLine = bad
-        ? '<div class="tag" style="color:var(--danger)">' + (health.headline || health.label || '') + '</div>'
+        ? '<div class="tag" style="color:var(--danger)">' + esc(health.headline || health.label || '') + '</div>'
         : '';
-      info.innerHTML = '<div>' + (node.displayName || node.name || '未命名')
-        + (node.group ? ' <span class="tag">[' + node.group + ']</span>' : '')
-        + (bad ? ' <span class="tag" style="color:var(--danger)">' + (health.label || '') + '</span>' : '')
+      // 设备名 / 分组 / 健康摘要都来自 B 端上报 —— 属于**不可信输入**，
+      // 必须转义后再拼进 HTML，否则一台被改过名字的机器就能往管理页里注入脚本
+      info.innerHTML = '<div>' + esc(node.displayName || node.name || '未命名')
+        + (node.group ? ' <span class="tag">[' + esc(node.group) + ']</span>' : '')
+        + (bad ? ' <span class="tag" style="color:var(--danger)">' + esc(health.label || '') + '</span>' : '')
         + '</div>'
-        + '<div class="tag mono">' + (node.ip || '') + (node.online
+        + '<div class="tag mono">' + esc(node.ip || '') + (node.online
           ? ' · CPU ' + (metrics.cpu === undefined ? '-' : metrics.cpu + '%')
             + ' · 内存 ' + (metrics.memory === undefined ? '-' : metrics.memory + '%')
           : ' · 离线') + '</div>'
@@ -960,16 +1036,15 @@ PAGE = r"""<!DOCTYPE html>
       box.innerHTML = '';
       (res.data.items || []).forEach(function (item) {
         var div = document.createElement('div');
-        div.innerHTML = '<span class="tag mono">' + item.time + '</span> '
-          + (item.ok ? '✅' : '⚠️') + ' ' + item.action + ' · ' + item.detail
-          + (item.source ? ' <span class="tag">(' + item.source + ')</span>' : '');
+        div.innerHTML = '<span class="tag mono">' + esc(item.time) + '</span> '
+          + (item.ok ? '✅' : '⚠️') + ' ' + esc(item.action) + ' · ' + esc(item.detail)
+          + (item.source ? ' <span class="tag">(' + esc(item.source) + ')</span>' : '');
         box.appendChild(div);
       });
     });
   }
 
   function logout() {
-    token = ''; localStorage.removeItem('ocb-remote-token');
     q('main').classList.add('hide'); q('loginCard').classList.remove('hide');
   }
 
@@ -994,7 +1069,7 @@ PAGE = r"""<!DOCTYPE html>
     var file = q('fileInput').files[0];
     if (!file) return;
     show(q('actionMsg'), '正在上传 ' + file.name + ' …');
-    fetch('/api/upload?name=' + encodeURIComponent(file.name) + '&token=' + encodeURIComponent(token),
+    fetch('/api/upload?name=' + encodeURIComponent(file.name),
       { method: 'POST', body: file }).then(function (r) { return r.json(); }).then(function (data) {
         show(q('actionMsg'), data.message || (data.ok ? '上传完成' : '上传失败'), data.ok ? 'ok' : 'err');
         if (data.ok) q('filePath').value = data.path;
@@ -1032,7 +1107,11 @@ PAGE = r"""<!DOCTYPE html>
   };
   q('action').parentElement.parentElement.appendChild(sendBtn);
 
-  if (token) { enter(); } else { q('loginCard').classList.remove('hide'); }
+  /* 不再靠本地 token 判断登录态：直接问服务端一次 —— cookie 在就进主界面。
+   这也是"凭据该不该存在 JS 里"的一个自检：页面完全不需要知道它。 */
+  api('/api/summary').then(function (res) {
+    if (res.status === 401) { q('loginCard').classList.remove('hide'); } else { enter(); }
+  });
 })();
 </script>
 </body>

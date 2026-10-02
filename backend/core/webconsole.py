@@ -302,7 +302,11 @@ font-size:10.5px;font-weight:400;background:rgba(248,81,73,.15);color:var(--bad)
 </div>
 
 <script>
-var T = localStorage.getItem('oc_token') || '';
+/* 凭据不再放进 JS 上下文：登录成功后由服务端下发 httpOnly cookie，
+   页面既拿不到也不需要 token —— 即使页面里出现 XSS，也偷不走凭据。
+   （配合 SameSite=Strict，cookie 也不会随跨站请求发出。） */
+function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function $(id){return document.getElementById(id)}
 function fmtRate(b){ if(!b&&b!==0) return '–'; var u=['B/s','KB/s','MB/s','GB/s'],i=0,v=b;
   while(v>=1024&&i<u.length-1){v/=1024;i++} return (v>=10||i===0?v.toFixed(0):v.toFixed(1))+' '+u[i] }
@@ -324,19 +328,19 @@ async function auth(){
   try{
     var r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code})});
     var d=await r.json();
-    if(d.ok){ T=d.token; localStorage.setItem('oc_token',T); $('login').classList.remove('on'); $('auth-msg').textContent=''; load() }
+    if(d.ok){ $('login').classList.remove('on'); $('auth-msg').textContent=''; load() }
     else { $('auth-msg').textContent=d.message||'访问码不正确'; $('btn-auth').disabled=false }
   }catch(e){ $('auth-msg').textContent='连接失败：'+e; $('btn-auth').disabled=false }
 }
 async function load(){
   try{
-    var r=await fetch('/api/status?token='+encodeURIComponent(T));
-    if(r.status===401){ T=''; localStorage.removeItem('oc_token'); showLogin(); return }
+    var r=await fetch('/api/status');
+    if(r.status===401){ showLogin(); return }
     var d=await r.json();
     $('live').style.display='block';
     $('host').textContent=d.device.hostname||d.device.model||'OpenClass-Box';
     var bits=[d.device.ip?('IP '+d.device.ip):'', d.device.cpuName||'', '已运行 '+fmtUp(Math.floor(Date.now()/1000-d.device.bootTime))];
-    $('addr').innerHTML='<span class="pill">在线</span> '+bits.filter(Boolean).join(' · ');
+    $('addr').innerHTML='<span class="pill">在线</span> '+esc(bits.filter(Boolean).join(' · '));
     setRing('r-cpu',d.cpu.percent,'v-cpu');
     setRing('r-mem',d.memory.percent,'v-mem');
     if(d.cpu.temp!==null&&d.cpu.temp!==undefined) setRing('r-temp',Math.min(100,d.cpu.temp/95*100),'v-temp'), $('legend').textContent='温度 '+d.cpu.temp+'°C（'+(d.cpu.tempSource||'实测')+'）· 每 5 秒刷新';
@@ -349,7 +353,7 @@ async function load(){
     if(!$('repairs').dataset.done){
       var html='';
       (d.repairs||[]).forEach(function(it){
-        html+='<button class="ghost" data-key="'+it.key+'">'+it.name+(it.admin?'（需管理员）':'')+'</button>';
+        html+='<button class="ghost" data-key="'+esc(it.key)+'">'+esc(it.name)+(it.admin?'（需管理员）':'')+'</button>';
       });
       $('repairs').innerHTML=html;
       $('repairs').dataset.done='1';
@@ -364,7 +368,7 @@ async function repair(key,name,btn){
   btn.disabled=true; var old=btn.textContent; btn.textContent='执行中…';
   try{
     var r=await fetch('/api/repair',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({token:T,key:key})});
+      body:JSON.stringify({key:key})});
     var d=await r.json();
     alert(d.message||(d.ok?'执行完成':'执行失败'));
   }catch(e){ alert('执行失败：'+e) }
@@ -373,14 +377,14 @@ async function repair(key,name,btn){
 async function health(){
   var btn=$('btn-health'); btn.disabled=true; btn.textContent='体检中…';
   try{
-    var r=await fetch('/api/health?token='+encodeURIComponent(T));
-    if(r.status===401){ T=''; localStorage.removeItem('oc_token'); showLogin(); return }
+    var r=await fetch('/api/health');
+    if(r.status===401){ showLogin(); return }
     var d=await r.json();
     var html='';
     // 结论先行：举着手机时要的是"这台机器现在能不能用"，不是一串检测明细
     if(d.verdict){
-      html+='<div class="verdict '+(d.verdict||'')+'"><b>'+(d.verdictLabel||'')+'</b>'+
-        '<span>'+(d.headline||'')+'</span></div>';
+      html+='<div class="verdict '+esc(d.verdict||'')+'"><b>'+esc(d.verdictLabel||'')+'</b>'+
+        '<span>'+esc(d.headline||'')+'</span></div>';
     }
     (d.unified||[]).forEach(function(it){
       var cls='';
@@ -390,12 +394,13 @@ async function health(){
       if(it.manual) tag='<span class="tag">需人工</span>';
       else if(it.repairable) tag='<span class="tag fix">可一键修复</span>';
       html+='<div class="item"><span class="dot'+cls+'"></span><div>'+
-        '<b>'+it.title+'</b>'+tag+'<em>'+it.summary+(it.advice?' —— '+it.advice:'')+'</em></div></div>';
+        '<b>'+esc(it.title)+'</b>'+tag+'<em>'+esc(it.summary)+
+        (it.advice?' —— '+esc(it.advice):'')+'</em></div></div>';
     });
     var s=d.summary||{};
     html+='<div class="hint">共 '+((s.total||0))+' 项，'+((s.issueCount||0))+' 项需要关注'+
       (d.cached?' · 30 秒内缓存':'')+'</div>';
-    if(d.scope) html+='<div class="hint">'+d.scope+'</div>';
+    if(d.scope) html+='<div class="hint">'+esc(d.scope)+'</div>';
     $('health').innerHTML=html;
   }catch(e){ $('health').innerHTML='<div class="hint">体检失败：'+e+'</div>' }
   btn.disabled=false; btn.textContent='重新体检';
@@ -460,20 +465,50 @@ def _make_handler():
 
         # ── 基础 ────────────────────────────────────────
 
-        def _send(self, body: bytes, ctype: str, status: int = 200) -> None:
+        def _send(
+            self,
+            body: bytes,
+            ctype: str,
+            status: int = 200,
+            headers: list[tuple[str, str]] | None = None,
+        ) -> None:
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            # 内嵌页面最容易漏掉的两条响应头：禁止 MIME 嗅探、不外泄 Referer
+            # （后者尤其重要：token 曾经放在 URL 里，会随 Referer 泄露）
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            for key, value in headers or ():
+                self.send_header(key, value)
             self.end_headers()
             self.wfile.write(body)
 
-        def _json(self, data: Any, status: int = 200) -> None:
+        def _json(
+            self,
+            data: Any,
+            status: int = 200,
+            headers: list[tuple[str, str]] | None = None,
+        ) -> None:
             self._send(
                 json.dumps(data, ensure_ascii=False).encode("utf-8"),
                 "application/json; charset=utf-8",
                 status,
+                headers,
             )
+
+        def _cookie_token(self) -> str:
+            """从 Cookie 头里取访问令牌。
+
+            为什么不再接受 `?token=`：放在 URL 里的凭据会进浏览器历史、
+            Referer 和服务端日志，等于把钥匙挂在门口。
+            """
+            for part in (self.headers.get("Cookie") or "").split(";"):
+                name, _, value = part.strip().partition("=")
+                if name == "oc_token" and value:
+                    return value
+            return ""
 
         def _body(self) -> dict[str, Any]:
             try:
@@ -500,8 +535,7 @@ def _make_handler():
             if not self._guard():
                 return
             parsed = urllib.parse.urlparse(self.path)
-            query = urllib.parse.parse_qs(parsed.query)
-            token = (query.get("token") or [""])[0]
+            token = self._cookie_token()      # 只认 Cookie，不再接受 ?token=
 
             if parsed.path in ("/", "/index.html"):
                 self._send(_PAGE.encode("utf-8"), "text/html; charset=utf-8")
@@ -547,7 +581,13 @@ def _make_handler():
                     token = secrets.token_urlsafe(24)
                     with _lock:
                         _tokens.add(token)
-                    self._json({"ok": True, "token": token, "message": ""})
+                    # 凭据只进 httpOnly cookie：JS 读不到，页面里即使出现 XSS
+                    # 也偷不走；SameSite=Strict 让它不会随跨站请求发出（缓解 CSRF）
+                    self._json(
+                        {"ok": True, "message": ""},
+                        200,
+                        [("Set-Cookie", f"oc_token={token}; HttpOnly; SameSite=Strict; Path=/")],
+                    )
                 else:
                     _note_fail(host)
                     self._json({"ok": False, "message": "访问码不正确"}, 401)
@@ -555,7 +595,7 @@ def _make_handler():
 
             if parsed.path == "/api/repair":
                 data = self._body()
-                if not _authorized(str(data.get("token") or "")):
+                if not _authorized(self._cookie_token()):
                     self._json({"ok": False, "message": "未授权"}, 401)
                     return
                 key = str(data.get("key") or "")
