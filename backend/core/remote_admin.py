@@ -234,11 +234,14 @@ def summary() -> dict[str, Any]:
     server = _lan()
     nodes = server.nodes()
     online = [n for n in nodes if n.get("online")]
+    # B 端上报的内容存在 info 里（cpu / memory / disk / health），而页面按
+    # metrics 读 —— 补齐这个别名，否则设备列表的 CPU、内存永远显示 "-"
+    enriched = [{**node, "metrics": node.get("info") or {}} for node in nodes]
     return {
         "serverRunning": _truthy(getattr(server, "running", False)),
         "pairingCode": getattr(server, "pairing_code", ""),
         "port": getattr(server, "port", 0),
-        "nodes": nodes,
+        "nodes": enriched,
         "counts": {"total": len(nodes), "online": len(online), "offline": len(nodes) - len(online)},
         "powerAllowed": _power_allowed(),
         "powerModes": POWER_MODES,
@@ -890,12 +893,22 @@ PAGE = r"""<!DOCTYPE html>
       var info = document.createElement('div');
       info.className = 'grow';
       var metrics = node.metrics || {};
+      // 健康摘要由 B 端上报（磁盘 / 内存 / 还原）。有问题直接标出来 ——
+      // 电教巡楼时不用逐台点开，扫一眼列表就知道该去哪一间
+      var health = metrics.health || {};
+      var bad = node.online && health.level && health.level !== 'ok';
+      var healthLine = bad
+        ? '<div class="tag" style="color:var(--danger)">' + (health.headline || health.label || '') + '</div>'
+        : '';
       info.innerHTML = '<div>' + (node.displayName || node.name || '未命名')
-        + (node.group ? ' <span class="tag">[' + node.group + ']</span>' : '') + '</div>'
+        + (node.group ? ' <span class="tag">[' + node.group + ']</span>' : '')
+        + (bad ? ' <span class="tag" style="color:var(--danger)">' + (health.label || '') + '</span>' : '')
+        + '</div>'
         + '<div class="tag mono">' + (node.ip || '') + (node.online
           ? ' · CPU ' + (metrics.cpu === undefined ? '-' : metrics.cpu + '%')
             + ' · 内存 ' + (metrics.memory === undefined ? '-' : metrics.memory + '%')
-          : ' · 离线') + '</div>';
+          : ' · 离线') + '</div>'
+        + healthLine;
       row.appendChild(cb); row.appendChild(dot); row.appendChild(info);
       box.appendChild(row);
     });

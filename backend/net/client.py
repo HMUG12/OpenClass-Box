@@ -108,6 +108,94 @@ def _foreground_app() -> str:
         return ""
 
 
+_HEALTH_TTL = 300.0          # 秒：轻量健康摘要的缓存时长
+_health_cache: dict[str, Any] = {"at": 0.0, "data": None}
+_health_lock = threading.Lock()
+
+
+def _quick_health() -> dict[str, Any]:
+    """给老师机看的轻量健康摘要（5 分钟缓存）。
+
+    为什么不做完整体检：这是**每几秒一次**的后台上报，跑完整体检（网络探测、
+    WMI 查询、课堂检测）既拖慢学生机，也会把 A 端刷满。所以只取三个"一眼就
+    知道有没有事"的信号：磁盘余量、内存占用、还原保护状态。
+
+    scope 字段如实写明只是摘要 —— 想要完整结论（投影 / 触摸 / 网络 / 声音）
+    由 A 端主动下发「一键体检」获取，那时的结果才是完整判定。
+    """
+    from ..core import diag_result as diag
+
+    now = time.time()
+    with _health_lock:
+        cached = _health_cache["data"]
+        if cached is not None and now - float(_health_cache["at"]) < _HEALTH_TTL:
+            return cached
+
+    items: list[dict[str, Any]] = []
+    try:
+        import psutil
+
+        usage = psutil.disk_usage("C:\\")
+        free_gb = usage.free / (1024 ** 3)
+        text = f"已用 {usage.percent:.0f}%（剩余 {free_gb:.1f} GB）"
+        if usage.percent >= 95:
+            items.append(diag.item("node.disk", "C 盘空间", "warn", text, advice="用「磁盘清理」清临时文件"))
+        elif usage.percent >= 90:
+            items.append(diag.item("node.disk", "C 盘空间", "watch", text))
+        else:
+            items.append(diag.item("node.disk", "C 盘空间", "ok", text))
+
+        mem = psutil.virtual_memory()
+        text = f"占用 {mem.percent:.0f}%"
+        if mem.percent >= 90:
+            items.append(diag.item("node.memory", "内存", "warn", text, advice="关闭不用的软件"))
+        elif mem.percent >= 80:
+            items.append(diag.item("node.memory", "内存", "watch", text))
+        else:
+            items.append(diag.item("node.memory", "内存", "ok", text))
+    except Exception:
+        pass
+
+    try:
+        from ..core.restore_watch import detect
+
+        result = detect()
+        level = str(result.get("level") or "ok")
+        reason = "；".join(result.get("reasons") or []) or str(result.get("detail") or "")
+        if level in ("watch", "warn", "replace"):
+            items.append(
+                diag.item(
+                    "node.restore",
+                    "还原保护",
+                    level,
+                    reason or "状态异常",
+                    advice=str(result.get("advice") or ""),
+                    source="restore",
+                    manual=True,
+                )
+            )
+        else:
+            items.append(diag.item("node.restore", "还原保护", "ok", reason or "保护中", source="restore"))
+    except Exception:
+        pass
+
+    summary = diag.summarize(items)
+    data = {
+        "level": summary["level"],
+        "label": summary["levelLabel"],
+        "headline": summary["headline"],
+        "issues": [
+            {"title": one["title"], "summary": one["summary"]}
+            for one in diag.only_issues(items)
+        ],
+        "scope": "轻量摘要（磁盘 / 内存 / 还原）",
+    }
+    with _health_lock:
+        _health_cache["at"] = now
+        _health_cache["data"] = data
+    return data
+
+
 def _status_payload() -> dict[str, Any]:
     """上报给老师机的本机状态（真实采集，失败项为 None）。"""
     from ..core.monitor import device_info, monitor
@@ -145,6 +233,12 @@ def _status_payload() -> dict[str, Any]:
             payload["disk"] = round(float(disks[0].get("percent") or 0), 1)
         response = monitor.metrics()
         payload["download"] = response.get("network", {}).get("download", 0)
+    except Exception:
+        pass
+
+    # 健康摘要：A 端设备列表据此一眼看出"哪台机器有事"
+    try:
+        payload["health"] = _quick_health()
     except Exception:
         pass
     return payload

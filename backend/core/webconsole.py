@@ -131,6 +131,27 @@ def _snapshot() -> dict[str, Any]:
     }
 
 
+def _enrich(result: dict[str, Any]) -> dict[str, Any]:
+    """给体检结果补上统一结论（与桌面端课前准备同一套判定规则）。
+
+    手机端只跑体检（几秒），不跑课堂检测（几十秒）—— 但判定**必须共用**
+    `preflight.verdict_for`，否则会出现"手机上电教委员看到可以上课、
+    回到讲台电脑上却提示建议先处理"这种自相矛盾。
+    scope 字段如实说明手机上没测什么，避免被当成"全机检查过了"。
+    """
+    from .diag_result import from_health, summarize
+    from .preflight import verdict_for
+
+    unified = result.get("unified") or from_health(result.get("items") or [])
+    return {
+        **result,
+        "unified": unified,
+        "summary": summarize(unified),
+        **verdict_for(unified),
+        "scope": "手机端仅体检；投影 / 触摸 / 教学软件请在电脑端「维护 → 课堂」查看",
+    }
+
+
 def _health() -> dict[str, Any]:
     """一键体检（30 秒缓存，避免手机反复点把机器压满）。"""
     now = time.time()
@@ -141,7 +162,7 @@ def _health() -> dict[str, Any]:
 
     from .health import run_checks
 
-    result = run_checks()
+    result = _enrich(run_checks())
     with _lock:
         _health_cache["at"] = now
         _health_cache["data"] = result
@@ -210,6 +231,17 @@ svg.chart line{stroke:rgba(128,128,128,.25);stroke-width:1}
 padding:16px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--fg);width:100%}
 .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;
 background:rgba(63,185,80,.15);color:var(--ok)}
+/* 结论块：手机上第一眼要看到"这台机器现在能不能用" */
+.verdict{padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+margin-bottom:6px;font-size:13px}
+.verdict b{display:block;font-size:14.5px;margin-bottom:3px}
+.verdict span{color:var(--dim);line-height:1.5}
+.verdict.ready{border-color:rgba(63,185,80,.5);background:rgba(63,185,80,.10)}
+.verdict.attention{border-color:rgba(210,153,34,.55);background:rgba(210,153,34,.10)}
+.verdict.blocked{border-color:rgba(248,81,73,.55);background:rgba(248,81,73,.12)}
+.tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;
+font-size:10.5px;font-weight:400;background:rgba(248,81,73,.15);color:var(--bad)}
+.tag.fix{background:rgba(63,185,80,.15);color:var(--ok)}
 </style>
 </head>
 <body>
@@ -345,11 +377,25 @@ async function health(){
     if(r.status===401){ T=''; localStorage.removeItem('oc_token'); showLogin(); return }
     var d=await r.json();
     var html='';
-    (d.items||[]).forEach(function(it){
-      html+='<div class="item"><span class="dot'+(it.ok?'':' bad')+'"></span><div>'+
-        '<b>'+it.name+'</b><em>'+it.detail+(it.suggest?' —— '+it.suggest:'')+'</em></div></div>';
+    // 结论先行：举着手机时要的是"这台机器现在能不能用"，不是一串检测明细
+    if(d.verdict){
+      html+='<div class="verdict '+(d.verdict||'')+'"><b>'+(d.verdictLabel||'')+'</b>'+
+        '<span>'+(d.headline||'')+'</span></div>';
+    }
+    (d.unified||[]).forEach(function(it){
+      var cls='';
+      if(it.status==='replace'||it.status==='warn') cls=' bad';
+      else if(it.status==='watch') cls=' warn';
+      var tag='';
+      if(it.manual) tag='<span class="tag">需人工</span>';
+      else if(it.repairable) tag='<span class="tag fix">可一键修复</span>';
+      html+='<div class="item"><span class="dot'+cls+'"></span><div>'+
+        '<b>'+it.title+'</b>'+tag+'<em>'+it.summary+(it.advice?' —— '+it.advice:'')+'</em></div></div>';
     });
-    html+='<div class="hint">'+(d.healthy? '全部通过（'+d.total+' 项）' : '通过 '+d.okCount+'/'+d.total+' 项'+(d.cached?' · 30 秒内缓存':''))+'</div>';
+    var s=d.summary||{};
+    html+='<div class="hint">共 '+((s.total||0))+' 项，'+((s.issueCount||0))+' 项需要关注'+
+      (d.cached?' · 30 秒内缓存':'')+'</div>';
+    if(d.scope) html+='<div class="hint">'+d.scope+'</div>';
     $('health').innerHTML=html;
   }catch(e){ $('health').innerHTML='<div class="hint">体检失败：'+e+'</div>' }
   btn.disabled=false; btn.textContent='重新体检';

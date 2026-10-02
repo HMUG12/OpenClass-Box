@@ -102,6 +102,25 @@ def _headline(
     return "各项检查正常，可以直接开始上课"
 
 
+def verdict_for(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """只做判定、不跑检测 —— 给已经拿到统一项的场景复用。
+
+    为什么要把判定拆出来：手机控制台只跑体检（几秒），桌面的课前准备还会跑
+    课堂检测（几十秒）。**但两处的判定规则必须完全一样** —— 同一个问题在
+    手机上说"可以上课"、在电脑上说"建议先处理"，是最伤信任的一类 bug。
+    所以结论从这里出，两边都只负责"收集条目"。
+    """
+    blocking, others = _classify(items)
+    verdict = "blocked" if blocking else ("attention" if others else "ready")
+    return {
+        "verdict": verdict,
+        "verdictLabel": VERDICTS[verdict],
+        "headline": _headline(verdict, blocking, others),
+        "blocking": blocking,
+        "attention": others,
+    }
+
+
 def run() -> dict[str, Any]:
     """跑一遍课前检查（体检 + 课堂 + 还原保护），返回可直接上屏的结论。
 

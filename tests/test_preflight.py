@@ -177,6 +177,45 @@ def test_source_failure_is_reported_but_not_fatal(monkeypatch):
     assert result["verdict"] in pf.VERDICTS
 
 
+# ── 共用判定：手机端与桌面端必须是同一个结论 ────────────────
+
+
+def test_verdict_for_is_shared_by_run(monkeypatch):
+    """verdict_for（手机端：只跑体检）与 run（桌面：含课堂检测）必须同源。
+
+    两边判定一旦漂了，就会出现"手机上电教委员看到可以上课，回到讲台电脑
+    却提示建议先处理"—— 这是最伤信任的一类不一致。
+    """
+    from backend.core import diag_result as dr
+
+    items = dr.from_health([_health_item("network", "网络连接", False, "未连接网线")])
+    direct = pf.verdict_for(items)
+    assert direct["verdict"] == "blocked"
+
+    _patch(monkeypatch, health=[_health_item("network", "网络连接", False, "未连接网线")])
+    full = pf.run()
+    assert full["verdict"] == direct["verdict"]
+    assert full["headline"] == direct["headline"]
+
+
+def test_verdict_for_on_empty_is_ready():
+    assert pf.verdict_for([])["verdict"] == "ready"
+
+
+def test_mobile_enrich_uses_same_rules():
+    """手机控制台的体检结果也要带上同一套结论与统一项。"""
+    from backend.core import webconsole
+
+    enriched = webconsole._enrich(
+        {"items": [_health_item("network", "网络连接", False, "未连接网线", "检查网线")]}
+    )
+    assert enriched["verdict"] == "blocked"
+    assert enriched["unified"][0]["id"] == "health.network"
+    assert enriched["summary"]["issueCount"] == 1
+    # 手机端没跑课堂检测，必须如实说明，别让人以为"整机都查过了"
+    assert "手机端仅体检" in enriched["scope"]
+
+
 def test_result_carries_summary_for_remote_and_mobile(monkeypatch):
     """手机端 / 远程汇总直接用这份结果：结论短、理由在、条目结构统一。"""
     _patch(

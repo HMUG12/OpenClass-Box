@@ -29,14 +29,26 @@ def _windows() -> bool:
 # ══════════════════════════════════════════════════════════════
 
 def run_checkup() -> dict[str, Any]:
+    from ..core.diag_result import from_health, summarize
     from ..core.health import run_checks
+    from ..core.preflight import verdict_for
 
     result = run_checks()
     items = result.get("items", [])
+    unified = result.get("unified") or from_health(items)
+    # 结论用与桌面端共用的判定：A 端汇总几十台机器时可以直接按 verdict 分组
+    # （「哪些机器现在上不了课」是老师最想先知道的一件事）
+    verdict = verdict_for(unified)
     return {
         "ok": True,
-        "message": f"体检完成：{result.get('okCount', 0)}/{result.get('total', 0)} 项正常",
-        "data": {"items": items, "healthy": result.get("healthy")},
+        "message": f"体检完成：{verdict['verdictLabel']}（{result.get('okCount', 0)}/{result.get('total', 0)} 项正常）",
+        "data": {
+            "items": items,
+            "healthy": result.get("healthy"),
+            "unified": unified,
+            "summary": summarize(unified),
+            **verdict,
+        },
     }
 
 
