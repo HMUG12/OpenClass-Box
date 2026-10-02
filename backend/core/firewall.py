@@ -24,7 +24,6 @@
 """
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import time
@@ -83,18 +82,48 @@ def _run_ps(script: str, timeout: float = 25.0) -> str:
     )
 
 
-_STATUS_PS = (
+# 网络类别：Get-NetConnectionProfile 不需要管理员权限
+_CATEGORY_PS = (
     "$ErrorActionPreference='SilentlyContinue';"
-    "try{"
-    "  $r = @(Get-NetFirewallRule -DisplayName 'OpenClass-Box*' |"
-    "        ForEach-Object { @{ enabled = [string]$_.Enabled;"
-    "                            profile = [string]$_.Profile;"
-    "                            direction = [string]$_.Direction } });"
-    "  $cats = @(Get-NetConnectionProfile | Select-Object -ExpandProperty NetworkCategory |"
-    "           ForEach-Object { [string]$_ });"
-    "  @{ rules = $r; categories = $cats } | ConvertTo-Json -Depth 5 -Compress"
-    "}catch{ '{}' }"
+    "@(Get-NetConnectionProfile | ForEach-Object { [string]$_.NetworkCategory }) -join ','"
 )
+
+# 无规则时 netsh 的两种措辞（跟随系统语言）
+_NO_RULE_MARKERS = ("没有与指定条件相匹配的规则", "No rules match")
+
+
+def _query_rule(name: str) -> dict[str, Any]:
+    """查询一条防火墙规则。
+
+    为什么用 netsh 而不用 Get-NetFirewallRule：**后者需要管理员权限**，
+    普通用户跑会 "Access is denied"；旧实现把这个异常吞掉后返回"没有规则"，
+    于是界面一直显示"未放行"，而规则其实好好地在那儿 —— 这正是用户看到的
+    "放行不了"。netsh 查规则不需要提权。
+
+    netsh 输出的措辞跟随系统语言（中/英），所以字段名两种都认。
+    """
+    text = _run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={name}"])
+    if not text or any(marker in text for marker in _NO_RULE_MARKERS):
+        return {"exists": False, "enabled": False, "inbound": False, "action": ""}
+
+    def field(*keys: str) -> str:
+        for line in text.splitlines():
+            low = line.strip().lower()
+            for key in keys:
+                if low.startswith(key.lower()):
+                    return line.split(":", 1)[1].strip() if ":" in line else ""
+        return ""
+
+    enabled = field("Enabled", "已启用").lower()
+    direction = field("Direction", "方向").lower()
+    return {
+        "exists": True,
+        "enabled": enabled in ("yes", "是", "true", "1"),
+        "inbound": direction.startswith("in") or direction.startswith("入"),
+        "action": field("Action", "操作").lower(),
+        "profiles": field("Profiles", "配置文件"),
+        "ports": field("LocalPort", "本地端口"),
+    }
 
 
 def _runas(target: str, params: str) -> int:
@@ -115,25 +144,11 @@ def _snapshot() -> dict[str, Any]:
     """读取当前规则与网络类别（只读，不需要管理员）。"""
     if os.name != "nt":
         return {"rules": [], "categories": []}
-    text = _run_ps(_STATUS_PS)
-    start = text.find("{")
-    if start < 0:
-        return {"rules": [], "categories": []}
-    try:
-        data = json.loads(text[start:])
-    except ValueError:
-        return {"rules": [], "categories": []}
-    if not isinstance(data, dict):
-        return {"rules": [], "categories": []}
-    rules = data.get("rules") or []
-    if isinstance(rules, dict):
-        rules = [rules]
-    cats = data.get("categories") or []
-    if isinstance(cats, str):
-        cats = [cats]
+    text = _run_ps(_CATEGORY_PS)
+    categories = [item.strip() for item in text.strip().split(",") if item.strip()]
     return {
-        "rules": [item for item in rules if isinstance(item, dict)],
-        "categories": [str(item) for item in cats],
+        "rules": [item for item in (_query_rule(RULE_TCP), _query_rule(RULE_UDP)) if item["exists"]],
+        "categories": categories,
     }
 
 
@@ -143,13 +158,9 @@ def status() -> dict[str, Any]:
         return {"supported": False, "allowed": True, "message": "非 Windows 系统无需放行", "rules": []}
 
     snap = _snapshot()
-    inbound = [
-        item
-        for item in snap["rules"]
-        if str(item.get("direction", "")).endswith("Inbound")
-    ]
+    inbound = [item for item in snap["rules"] if item.get("inbound")]
     # 两条规则（TCP / UDP）都启用才算放行完整
-    enabled = [item for item in inbound if str(item.get("enabled", "")).lower() == "true"]
+    enabled = [item for item in inbound if item.get("enabled")]
     allowed = len(enabled) >= 2
 
     categories = snap["categories"]

@@ -16,8 +16,9 @@ def _snapshot(rules, categories):
     return {"rules": rules, "categories": categories}
 
 
-def _rule(enabled: str = "True", profile: str = "Private, Domain", direction: str = "Inbound"):
-    return {"enabled": enabled, "profile": profile, "direction": direction}
+def _rule(enabled: bool = True, inbound: bool = True):
+    """一条"已启用 + 入站"的规则（netsh 查询后的形状）。"""
+    return {"exists": True, "enabled": enabled, "inbound": inbound, "profiles": "专用, 域"}
 
 
 # ── 状态判定 ────────────────────────────────────────────────
@@ -48,7 +49,7 @@ def test_allowed_with_two_enabled_inbound_rules(monkeypatch):
 def test_disabled_rules_do_not_count(monkeypatch):
     """规则在但被禁用 = 没放行，不能报成功。"""
     monkeypatch.setattr(
-        fw, "_snapshot", lambda: _snapshot([_rule(enabled="False"), _rule()], ["Private"])
+        fw, "_snapshot", lambda: _snapshot([_rule(enabled=False), _rule()], ["Private"])
     )
     assert fw.status()["allowed"] is False
 
@@ -58,9 +59,7 @@ def test_outbound_rules_do_not_count(monkeypatch):
     monkeypatch.setattr(
         fw,
         "_snapshot",
-        lambda: _snapshot(
-            [_rule(direction="Outbound"), _rule(direction="Outbound")], ["Private"]
-        ),
+        lambda: _snapshot([_rule(inbound=False), _rule(inbound=False)], ["Private"]),
     )
     assert fw.status()["allowed"] is False
 
@@ -87,37 +86,68 @@ def test_categories_are_localized(monkeypatch):
     assert fw.status()["categories"] == ["专用", "公用"]
 
 
-# ── PowerShell 输出解析 ─────────────────────────────────────
+# ── netsh 输出解析（不用管理员权限的那条路）────────────────
 
 
-def test_snapshot_parses_powershell_json(monkeypatch):
-    payload = json.dumps(
-        {
-            "rules": [{"enabled": "True", "profile": "Private", "direction": "Inbound"}],
-            "categories": ["Private"],
-        }
+def test_query_rule_parses_netsh_output(monkeypatch):
+    payload = (
+        "Rule Name:                            OpenClass-Box 局域网服务\n"
+        "----------------------------------------------------------------------\n"
+        "Enabled:                              Yes\n"
+        "Direction:                            In\n"
+        "Profiles:                             Domain,Private\n"
+        "Protocol:                             TCP\n"
+        "LocalPort:                            38610,38620,38900\n"
+        "Action:                               Allow\n"
+        "Ok.\n"
     )
-    monkeypatch.setattr(fw, "_run_ps", lambda *a, **k: payload)
-    snap = fw._snapshot()
-    assert len(snap["rules"]) == 1
-    assert snap["categories"] == ["Private"]
+    monkeypatch.setattr(fw, "_run", lambda *a, **k: payload)
+    rule = fw._query_rule("OpenClass-Box 局域网服务")
+    assert rule["exists"] is True
+    assert rule["enabled"] is True
+    assert rule["inbound"] is True
+    assert rule["ports"] == "38610,38620,38900"
 
 
-def test_snapshot_handles_single_object(monkeypatch):
-    """PowerShell 的 ConvertTo-Json 对**单元素**数组会退化成对象，必须兼容。"""
-    payload = json.dumps(
-        {"rules": {"enabled": "True", "direction": "Inbound"}, "categories": "Private"}
+def test_query_rule_parses_chinese_output(monkeypatch):
+    """netsh 的措辞跟随系统语言，中文输出也要认。"""
+    payload = (
+        "规则名称:                            OpenClass-Box 局域网服务\n"
+        "已启用:                              是\n"
+        "方向:                                入\n"
+        "操作:                                允许\n"
     )
-    monkeypatch.setattr(fw, "_run_ps", lambda *a, **k: payload)
-    snap = fw._snapshot()
-    assert len(snap["rules"]) == 1
-    assert snap["categories"] == ["Private"]
+    monkeypatch.setattr(fw, "_run", lambda *a, **k: payload)
+    rule = fw._query_rule("OpenClass-Box 局域网服务")
+    assert rule["enabled"] is True
+    assert rule["inbound"] is True
+
+
+def test_query_rule_reports_missing_rule(monkeypatch):
+    """没有规则时 netsh 会给一句提示（中英文两种），不能当成存在。"""
+    monkeypatch.setattr(fw, "_run", lambda *a, **k: "没有与指定条件相匹配的规则。\n")
+    assert fw._query_rule("x")["exists"] is False
+
+    monkeypatch.setattr(fw, "_run", lambda *a, **k: "No rules match the specified criteria.\n")
+    assert fw._query_rule("x")["exists"] is False
+
+
+def test_query_rule_handles_disabled(monkeypatch):
+    """规则存在但被禁用 ≠ 放行（status 依赖这个区分）。"""
+    payload = "Enabled:                              No\nDirection:                            In\n"
+    monkeypatch.setattr(fw, "_run", lambda *a, **k: payload)
+    rule = fw._query_rule("x")
+    assert rule["exists"] is True
+    assert rule["enabled"] is False
 
 
 def test_snapshot_survives_garbage(monkeypatch):
     """PowerShell 被策略挡住、输出乱码时，只能当"查不到"，不能崩。"""
-    monkeypatch.setattr(fw, "_run_ps", lambda *a, **k: "不是 JSON")
-    assert fw._snapshot() == {"rules": [], "categories": []}
+    monkeypatch.setattr(fw, "_run_ps", lambda *a, **k: "")
+    monkeypatch.setattr(fw, "_query_rule", lambda name: {"exists": False})
+    snap = fw._snapshot()
+    assert snap["rules"] == []
+    assert snap["categories"] == []
 
 
 # ── 放行流程（关键：不能假成功）────────────────────────────
