@@ -35,7 +35,7 @@
 
 [Setup]
 AppName={#AppTitle}
-AppVersion=0.2.0
+AppVersion=0.2.1
 AppPublisher=HMUG12
 AppComments=开源实用工具箱 · A/B 端
 DefaultDirName={autopf}\{#InstallDir}
