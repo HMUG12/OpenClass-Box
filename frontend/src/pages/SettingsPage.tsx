@@ -765,7 +765,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
       <div className="oc-panel" style={{ marginBottom: 12 }}>
         <SwitchRow
           label="开启手机控制台"
-          desc="同一 WiFi 下用手机浏览器打开下面的地址，即可查看状态、跑体检、远程修复（无需装 App、不连外网）"
+          desc="同一 WiFi 下用手机浏览器打开下面的地址，即可查看状态、跑体检、远程修复、传文件（无需装 App、不连外网）"
           checked={!!consoleState?.running}
           disabled={consoleBusy || loading}
           onChange={toggleConsole}
@@ -909,7 +909,7 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
       <div className="oc-panel" style={{ marginBottom: 12 }}>
         <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
           Windows 防火墙默认拦截入站连接：本机能打开的服务，同网段的手机或其他电脑却连不上。
-          手机控制台、临时传输、机房协同都要先放行，这里一次开好。
+          手机控制台、文件传输、机房协同都要先放行，这里一次开好。
         </div>
         <div className="oc-actions">
           <Button

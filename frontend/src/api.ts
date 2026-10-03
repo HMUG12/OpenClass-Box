@@ -120,6 +120,8 @@ export interface OcApi {
   diagnostic_report(): Promise<any>
   preflight(): Promise<any>
   preflight_last(): Promise<any>
+  transfer_state(): Promise<any>
+  transfer_set_accepting(enabled: boolean): Promise<any>
   report_frontend_error(message: string): Promise<any>
   frontend_ready(): Promise<any>
   get_startup_mode(): Promise<string>
@@ -135,6 +137,8 @@ export interface OcApi {
   power_control_status(): Promise<any>
   set_allow_power(value: boolean): Promise<any>
   chat_state(): Promise<any>
+  transfer_state(): Promise<any>
+  transfer_set_accepting(enabled: boolean): Promise<any>
   chat_host(nickname?: string, roomName?: string, password?: string): Promise<any>
   chat_join(host: string, code: string, nickname?: string, password?: string): Promise<any>
   chat_send_text(text: string): Promise<any>
@@ -512,7 +516,17 @@ const MOCK_API: OcApi = {
     }
   },
   async chat_host() { return { ok: false, message: '开发预览模式：无法开房间' } },
-  async chat_join() { return { ok: false, message: '开发预览模式：无法加入房间' } },
+  async chat_join() { return { ok: false, message: '开发预览模式：无法连接' } },
+  async transfer_state() {
+    return {
+      ok: false, role: '', accepting: false, remoteAccepting: false,
+      files: [], incoming: [], dir: '', quotaUsed: 0, quotaTotal: 0,
+      maxFile: 0, hostUrl: '', roomCode: '', error: '',
+    }
+  },
+  async transfer_set_accepting() {
+    return { ok: false, message: '开发预览模式：未执行真实操作' }
+  },
   async chat_send_text() { return { ok: false, message: '开发预览模式' } },
   async chat_send_file() { return { ok: false, message: '开发预览模式' } },
   async chat_pick_file() { return { ok: false, path: '', message: '开发预览模式' } },

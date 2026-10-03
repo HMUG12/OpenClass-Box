@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Input, Spinner } from '@fluentui/react-components'
 import { api } from '../api'
 
@@ -9,36 +9,23 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`
 }
 
-function timeText(ts: number): string {
-  try {
-    const date = new Date(ts)
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-  } catch {
-    return ''
-  }
-}
-
 /**
- * 临时聊天传输 —— 局域网里用完即走的聊天与文件互传。
- * 谁开房间谁当主机，关掉程序房间就消失，不依赖任何服务器。
+ * 局域网临时文件传输 —— 手机、电脑在同一 WiFi 下互传文件。
+ *
+ * 2026-10：从「临时聊天传输」改来。原先要记两个码（访问码 + 房间码）、
+ * 开两个页面；现在并入手机控制台 —— 一个访问码、一个地方。
+ * 文字聊天已从界面移除（后端接口保留，想恢复只要把界面加回来）。
  */
 export default function ChatPage() {
   const [state, setState] = useState<any>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
-  const [text, setText] = useState('')
-  const [form, setForm] = useState({
-    nickname: '',
-    roomName: '',
-    password: '',
-    host: '',
-    code: '',
-  })
-  const listRef = useRef<HTMLDivElement | null>(null)
+  const [form, setForm] = useState({ host: '', code: '', nickname: '' })
+  const role = state?.role ?? ''
 
   const load = async () => {
     try {
-      setState(await api.chat_state())
+      setState(await api.transfer_state())
     } catch {
       /* 忽略 */
     }
@@ -48,18 +35,12 @@ export default function ChatPage() {
     void load()
   }, [])
 
-  // 在房间里时持续刷新（成员端消息由主机中转过来）
+  // 连着对方时持续刷新：对方的开关状态、对方发来的文件
   useEffect(() => {
-    if (!state?.active) return
-    const timer = window.setInterval(() => void load(), 2000)
+    if (role !== 'member') return
+    const timer = window.setInterval(() => void load(), 3000)
     return () => window.clearInterval(timer)
-  }, [state?.active])
-
-  // 有新消息时自动滚到底部
-  useEffect(() => {
-    const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [state?.messages?.length])
+  }, [role])
 
   const act = async (fn: () => Promise<any>) => {
     setBusy(true)
@@ -75,13 +56,6 @@ export default function ChatPage() {
     }
   }
 
-  const sendText = async () => {
-    const value = text.trim()
-    if (!value) return
-    setText('')
-    await act(() => api.chat_send_text(value))
-  }
-
   const pickAndSend = async () => {
     const picked = await api.chat_pick_file()
     if (!picked?.ok) {
@@ -91,101 +65,82 @@ export default function ChatPage() {
     await act(() => api.chat_send_file(picked.path))
   }
 
-  const copyRoom = async () => {
+  const copyAddress = async () => {
+    const text = state?.hostUrl ?? ''
     try {
-      await navigator.clipboard.writeText(`${state?.hostUrl ?? ''} 房间码 ${state?.roomCode ?? ''}`)
-      setMsg('已复制「主机地址 + 房间码」，发给同事即可')
+      await navigator.clipboard.writeText(text)
+      setMsg('已复制本机地址')
     } catch {
-      setMsg(`请手动告知同事：${state?.hostUrl} 房间码 ${state?.roomCode}`)
+      setMsg('本机地址：' + text)
     }
   }
 
-  const messages: any[] = state?.messages ?? []
-  const members: any[] = state?.members ?? []
+  const files: any[] = state?.files ?? []
+  const incoming: any[] = state?.incoming ?? []
+  // 接收方看"我收到的"，发送方看"对方发来的" —— 同一份列表模板，两种数据源
+  const shown = role === 'member' ? incoming : files
+  const maxFile = Math.round((state?.maxFile ?? 0) / 1048576)
 
-  // ── 未在房间：创建 / 加入 ──
-  if (!state?.active) {
+  // ── 空闲：开启接收，或连接另一台机器 ──
+  if (role !== 'host' && role !== 'member') {
     return (
       <div className="oc-page">
         <div className="oc-page-header">
-          <div className="oc-page-title">临时传输</div>
+          <div className="oc-page-title">局域网临时文件传输</div>
           <div className="oc-page-desc">
-            同一 WiFi 下临时聊天与互传课件，输入同一个房间码即可；关掉程序房间就消失，不依赖服务器
+            同一 WiFi 下互传文件。手机打开「手机控制台」输入访问码即可传；电脑之间也用同一个访问码
           </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
           <div className="oc-panel">
-            <div className="oc-panel-title">开一个房间（我当主机）</div>
-            <div style={{ display: 'grid', gap: 8 }}>
-              <Input
-                placeholder="我的昵称（如：电教小王）"
-                value={form.nickname}
-                onChange={(_e, d) => setForm({ ...form, nickname: d.value })}
-              />
-              <Input
-                placeholder="房间名（可选，如：三楼办公室）"
-                value={form.roomName}
-                onChange={(_e, d) => setForm({ ...form, roomName: d.value })}
-              />
-              <Input
-                placeholder="房间密码（可选，留空则凭房间码加入）"
-                value={form.password}
-                onChange={(_e, d) => setForm({ ...form, password: d.value })}
-              />
-              <Button
-                appearance="primary"
-                disabled={busy}
-                onClick={() =>
-                  void act(() => api.chat_host(form.nickname || '我', form.roomName, form.password))
-                }
-              >
-                创建房间
-              </Button>
+            <div className="oc-panel-title">让这台电脑接收</div>
+            <div className="oc-usage-sub" style={{ marginBottom: 10 }}>
+              开启后，手机或其他电脑用「手机控制台」的访问码就能把文件发进来。
+              {maxFile > 0 ? ` 单个文件不超过 ${maxFile} MB。` : ''}
             </div>
+            <Button
+              appearance="primary"
+              disabled={busy}
+              onClick={() => void act(() => api.transfer_set_accepting(true))}
+            >
+              开启接收
+            </Button>
             <div className="oc-hint" style={{ marginTop: 8 }}>
-              本机会成为消息中转站：同事发的内容经过你转给他们。文件也会先存到你这台机器，
-              可在房间里一键清空。
+              不用记房间码 —— 访问码就在「设置 → 手机控制台」，和看状态用的是同一个。
             </div>
           </div>
 
           <div className="oc-panel">
-            <div className="oc-panel-title">加入同事的房间</div>
+            <div className="oc-panel-title">往另一台电脑发</div>
             <div style={{ display: 'grid', gap: 8 }}>
               <Input
-                placeholder="主机地址（如 192.168.1.20 或 192.168.1.20:38620）"
+                placeholder="对方地址（如 192.168.0.105 或 192.168.0.105:38610）"
                 value={form.host}
                 onChange={(_e, d) => setForm({ ...form, host: d.value })}
               />
               <Input
-                placeholder="房间码（6 位数字）"
+                placeholder="对方的访问码（6 位数字，在对方「设置 → 手机控制台」）"
                 value={form.code}
                 onChange={(_e, d) => setForm({ ...form, code: d.value })}
               />
               <Input
-                placeholder="我的昵称"
+                placeholder="我的昵称（对方能看到，便于认出来）"
                 value={form.nickname}
                 onChange={(_e, d) => setForm({ ...form, nickname: d.value })}
-              />
-              <Input
-                placeholder="房间密码（没有就留空）"
-                value={form.password}
-                onChange={(_e, d) => setForm({ ...form, password: d.value })}
               />
               <Button
                 appearance="primary"
                 disabled={busy}
                 onClick={() =>
-                  void act(() =>
-                    api.chat_join(form.host, form.code, form.nickname || '同事', form.password)
-                  )
+                  void act(() => api.chat_join(form.host, form.code, form.nickname || '同事'))
                 }
               >
-                加入房间
+                连接
               </Button>
             </div>
             <div className="oc-hint" style={{ marginTop: 8 }}>
-              房间码与主机地址由开房间的人告诉你（他点「复制邀请」就能一次发过来）。
+              对方要先点「开启接收」，不然传过去也没人收。
             </div>
           </div>
         </div>
@@ -199,148 +154,101 @@ export default function ChatPage() {
     )
   }
 
-  // ── 在房间里：聊天界面 ──
+  // ── 已在传输中 ──
+  const isHost = role === 'host'
   return (
     <div className="oc-page">
       <div className="oc-page-header">
         <div className="oc-page-title">
-          临时传输
+          局域网临时文件传输
           <span className="oc-list-sub" style={{ marginLeft: 10, fontWeight: 400 }}>
-            {state.role === 'host' ? '我是主机' : '已加入房间'}
-            {state.error ? ` · ${state.error}` : ''}
+            {isHost ? '本机正在接收' : '已连接对方'}
+            {state.error ? ' · ' + state.error : ''}
           </span>
         </div>
         <div className="oc-page-desc">
-          房间 {state.roomCode}
-          {state.roomName ? `（${state.roomName}）` : ''} · {members.length} 人在线 · 聊天记录只存在内存里，
-          关掉程序即消失
+          {isHost
+            ? '手机或其他电脑用「手机控制台」的访问码就能把文件发进来'
+            : '对方地址 ' + (state.hostUrl || '')}
         </div>
       </div>
 
       <div className="oc-panel" style={{ marginBottom: 12 }}>
         <div className="oc-actions">
-          <Button size="small" appearance="secondary" onClick={() => void copyRoom()}>
-            复制邀请（地址 + 房间码）
-          </Button>
-          <Button size="small" appearance="secondary" onClick={() => void pickAndSend()} disabled={busy}>
-            发送文件…
-          </Button>
+          {isHost ? (
+            <Button size="small" appearance="secondary" onClick={() => void copyAddress()}>
+              复制本机地址
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              appearance="secondary"
+              onClick={() => void pickAndSend()}
+              disabled={busy || !state.remoteAccepting}
+            >
+              发送文件…
+            </Button>
+          )}
           <Button
             size="small"
             appearance="secondary"
             onClick={() => void act(() => api.chat_clear_received())}
             disabled={busy}
           >
-            清空临时文件
+            清空已收文件
           </Button>
           <Button
             size="small"
             onClick={() => {
-              if (window.confirm('退出房间？聊天记录会立即清空。')) {
-                void act(() => api.chat_leave(true))
-              }
+              const ask = isHost ? '关闭接收？别人就传不进来了。' : '断开连接？'
+              if (window.confirm(ask)) void act(() => api.chat_leave(false))
             }}
             disabled={busy}
           >
-            退出房间
+            {isHost ? '关闭接收' : '断开连接'}
           </Button>
-          <span className="oc-list-sub">
-            在线：{members.map((m) => `${m.nickname}${m.host ? '（主机）' : ''}`).join('、')}
-          </span>
+          {!isHost && (
+            <span className="oc-list-sub">
+              {state.remoteAccepting ? '对方正在接收' : '对方还没有开启接收'}
+            </span>
+          )}
         </div>
       </div>
 
       <div className="oc-panel">
-        <div
-          ref={listRef}
-          style={{
-            maxHeight: 420,
-            minHeight: 220,
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            paddingRight: 4,
-          }}
-        >
-          {messages.length === 0 && <div className="oc-hint">还没有消息，打个招呼吧。</div>}
-          {messages.map((item: any) => {
-            if (item.kind === 'system') {
-              return (
-                <div
-                  key={item.id}
-                  className="oc-hint"
-                  style={{ textAlign: 'center', fontSize: 12 }}
-                >
-                  {item.text}
+        <div className="oc-panel-title">{isHost ? '收到的文件' : '对方发来的文件'}</div>
+        <div className="oc-list" style={{ marginTop: 6 }}>
+          {shown.length === 0 && (
+            <div className="oc-hint">
+              {isHost ? '还没有人传文件过来。' : '对方还没有发文件过来。'}
+            </div>
+          )}
+          {shown.map((one: any) => (
+            <div className="oc-list-row" key={one.id}>
+              <div className="oc-list-main">
+                <div className="oc-list-title">{one.name}</div>
+                <div className="oc-list-sub">
+                  {formatSize(one.size)}
+                  {one.from ? ` · 来自 ${one.from}` : ''}
+                  {one.at ? ` · ${one.at}` : ''}
                 </div>
-              )
-            }
-            const mine = item.sender === state.nickname
-            return (
-              <div
-                key={item.id}
-                style={{
-                  alignSelf: mine ? 'flex-end' : 'flex-start',
-                  maxWidth: '78%',
-                  background: mine ? 'var(--colorBrandBackground2, rgba(76,141,255,.16))' : 'var(--oc-surface)',
-                  border: '1px solid var(--oc-border)',
-                  borderRadius: 'var(--oc-radius)',
-                  padding: '8px 12px',
-                }}
-              >
-                <div className="oc-list-sub" style={{ fontSize: 12 }}>
-                  {mine ? '我' : item.sender} · {timeText(item.ts)}
-                </div>
-                {item.kind === 'file' && item.file ? (
-                  <div style={{ marginTop: 4 }}>
-                    <div className="oc-list-title" style={{ fontSize: 13.5 }}>
-                      📎 {item.file.name}
-                    </div>
-                    <div className="oc-list-sub">
-                      {formatSize(item.file.size)}
-                      {state.role === 'member' && (
-                        <Button
-                          size="small"
-                          appearance="secondary"
-                          style={{ marginLeft: 8 }}
-                          onClick={() =>
-                            void act(() => api.chat_save_file(item.file.id, item.file.name))
-                          }
-                        >
-                          下载到本机
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 2, userSelect: 'text', wordBreak: 'break-word' }}>
-                    {item.text}
-                  </div>
-                )}
               </div>
-            )
-          })}
+              {!isHost && (
+                <Button
+                  size="small"
+                  appearance="secondary"
+                  disabled={busy}
+                  onClick={() => void act(() => api.chat_save_file(one.id, one.name))}
+                >
+                  下载到本机
+                </Button>
+              )}
+            </div>
+          ))}
         </div>
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <Input
-            value={text}
-            placeholder="输入消息，回车发送"
-            onChange={(_e, data) => setText(data.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void sendText()
-            }}
-            style={{ flex: 1 }}
-          />
-          <Button appearance="primary" onClick={() => void sendText()} disabled={busy}>
-            发送
-          </Button>
-        </div>
-
-        {state.receivedDir && (
+        {state.dir && (
           <div className="oc-hint" style={{ marginTop: 8 }}>
-            收到的文件放在：{state.receivedDir}
+            收到的文件放在：{state.dir}
           </div>
         )}
         {msg && (

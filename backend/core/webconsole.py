@@ -90,6 +90,105 @@ def _authorized(token: str) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════
+# 局域网文件传输（并入本控制台）
+# ══════════════════════════════════════════════════════════════
+#
+# 原本是独立的 38620 服务 + 独立的房间码。现在合成一个服务、一个访问码：
+# 手机打开本控制台就能传文件，电脑之间互传也走同一套。
+#
+# 代价要说清楚：**权限统一** —— 原来"能管这台机器"与"能往它传文件"是两个码，
+# 现在合成一个。能进来的人就能往这台机器传文件（仍限局域网、仍限大小、
+# 文件名强制清洗，不会变成"谁都能往里塞东西"）。
+
+
+def _transfer_auth(handler: Any) -> dict[str, Any] | None:
+    """传输请求的认证。
+
+    两条路都通：
+      · 手机 / 平板浏览器 —— 走 httpOnly cookie（登录控制台时已下发）；
+      · 电脑端客户端      —— 走 join 换来的传输 token（放在 query 里）。
+
+    **只从 query 取 token，不读 body** —— 上传请求的 body 就是文件本身，
+    这里读掉的话后面就传不到文件了。
+    """
+    from .chat import chat
+
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(handler.path).query)
+    token = (query.get("token") or [""])[0]
+    if token:
+        member = chat.member_by_token(token)
+        if member:
+            return member
+
+    if _authorized(handler._cookie_token()):
+        ip = str(handler.client_address[0])
+        return chat.touch_member(ip, f"设备 {ip}")
+    return None
+
+
+def _transfer_join(handler: Any, data: dict[str, Any]) -> dict[str, Any]:
+    """用**访问码**换传输令牌（给电脑端客户端用；手机走 cookie 不用这一步）。
+
+    失败锁定与登录共用同一套计数 —— 免得这里变成一个可以无限试的入口。
+    """
+    from .chat import chat
+
+    host = str(handler.client_address[0])
+    if not _allow_attempt(host):
+        return {"ok": False, "message": "尝试次数过多，请 1 分钟后再试"}
+    if str(data.get("code") or "") != _code:
+        _note_fail(host)
+        return {"ok": False, "message": "访问码不正确"}
+    _clear_fails(host)
+
+    member = chat.touch_member(host, str(data.get("nickname") or ""))
+    return {
+        "ok": True,
+        "token": member["id"],
+        "roomCode": chat.room_code or "local",
+        "accepting": chat.accepting,
+        "message": "已连接，可以传文件了" if chat.accepting else "已连接，但对方还没开启接收",
+    }
+
+
+def _local_ipv4() -> set[str]:
+    """本机所有 IPv4 地址（含回环），用来判断"是不是我自己"。
+
+    为什么不用 local_ip()：它只返回一个（多网卡时按优先级挑一个），
+    而一台机器往往有多个地址 —— 只跟它比的话，从另一个地址访问自己的
+    机器会被当成"局域网里的其他设备"，于是本机想开个接收都被拒。
+    """
+    import socket as _socket
+
+    found: set[str] = {"127.0.0.1", "::1"}
+    try:
+        for info in _socket.getaddrinfo(_socket.gethostname(), None, _socket.AF_INET):
+            found.add(str(info[4][0]))
+    except OSError:
+        pass
+    try:
+        import psutil
+
+        for addresses in psutil.net_if_addrs().values():
+            for addr in addresses:
+                if addr.family == _socket.AF_INET:
+                    found.add(str(addr.address))
+    except Exception:
+        pass
+    return found
+
+
+def _transfer_is_local(handler: Any) -> bool:
+    """是否来自本机 —— 只有本机能开关"是否接收文件"。"""
+    from .monitor import local_ip
+
+    try:
+        ip = str(handler.client_address[0])
+    except Exception:
+        return False
+    return ip in _local_ipv4()
+
+# ══════════════════════════════════════════════════════════════
 # 数据
 # ══════════════════════════════════════════════════════════════
 
@@ -265,6 +364,14 @@ font-size:10.5px;font-weight:400;background:rgba(248,81,73,.15);color:var(--bad)
   <b style="font-size:14px">一键体检</b>
   <button id="btn-health">开始体检</button>
   <div id="health"></div>
+</div>
+
+<div class="card" id="xferCard">
+  <b style="font-size:14px">文件传输</b>
+  <div class="hint" id="xferHint">把手机里的文件直接传到这台电脑。</div>
+  <input type="file" id="xferFile" style="display:none">
+  <button id="btn-xfer">选择文件</button>
+  <div id="xferList"></div>
 </div>
 
 <div class="card">
@@ -443,6 +550,52 @@ Array.prototype.forEach.call(document.querySelectorAll('#chartTabs button'),func
 $('btn-auth').onclick=auth;
 $('code').addEventListener('keydown',function(e){ if(e.key==='Enter') auth() });
 $('btn-health').onclick=health;
+
+/* ── 文件传输 ─────────────────────────────────────────────
+   与电脑端共用同一个访问码：能打开这个控制台，就能往这台电脑传文件。 */
+var xferOn=false;
+function xferState(){
+  fetch('/api/transfer/state').then(function(r){return r.json()}).then(function(d){
+    if(!d||!d.ok) return;
+    xferOn=!!d.accepting;
+    $('xferHint').textContent = xferOn
+      ? '把手机里的文件传到这台电脑（单个不超过 '+Math.round((d.maxFile||0)/1048576)+' MB）'
+      : '对方还没有开启接收 —— 请让对方在电脑上打开「文件传输」并点「开启接收」。';
+    $('btn-xfer').disabled=!xferOn;
+  }).catch(function(){});
+}
+$('btn-xfer').onclick=function(){ $('xferFile').click() };
+$('xferFile').onchange=function(){
+  var f=this.files[0];
+  this.value='';            // 允许连续选同一个文件再传一次
+  if(f) uploadOne(f);
+};
+function uploadOne(f){
+  var box=$('xferList');
+  var row=document.createElement('div');
+  row.className='item';
+  row.innerHTML='<div><b>'+esc(f.name)+'</b><em>准备上传…</em></div>';
+  box.insertBefore(row,box.firstChild);
+  var note=row.querySelector('em');
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST','/api/transfer/upload?name='+encodeURIComponent(f.name));
+  xhr.upload.onprogress=function(e){
+    if(e.lengthComputable) note.textContent='上传中 '+Math.round(e.loaded/e.total*100)+'%';
+  };
+  xhr.onload=function(){
+    var d={};
+    try{ d=JSON.parse(xhr.responseText) }catch(e){}
+    note.textContent = (xhr.status===200&&d&&d.ok)
+      ? '已送达到这台电脑'
+      : '失败：'+((d&&d.message)||('HTTP '+xhr.status));
+  };
+  xhr.onerror=function(){ note.textContent='失败：连接中断' };
+  // 直接把 File 当 body 发送。不用 FormData —— 那样是 multipart 编码，
+  // 也就不用把文件读进 JS 内存（几百 MB 的课件会直接把页面搞卡死）。
+  xhr.send(f);
+}
+xferState();
+setInterval(xferState,4000);
 load();
 setInterval(load,5000);
 </script>
@@ -534,6 +687,20 @@ def _make_handler():
         def do_GET(self) -> None:  # noqa: N802
             if not self._guard():
                 return
+
+            # 文件传输挂在同一个服务上（/api/transfer/*）。放在最前面判断，
+            # 未命中就自动落回本控制台自己的路由。
+            from .chat import chat, route_transfer
+
+            if route_transfer(
+                chat,
+                self,
+                auth=_transfer_auth,
+                join=_transfer_join,
+                is_local=_transfer_is_local,
+            ):
+                return
+
             parsed = urllib.parse.urlparse(self.path)
             token = self._cookie_token()      # 只认 Cookie，不再接受 ?token=
 
@@ -568,6 +735,18 @@ def _make_handler():
         def do_POST(self) -> None:  # noqa: N802
             if not self._guard():
                 return
+
+            from .chat import chat, route_transfer
+
+            if route_transfer(
+                chat,
+                self,
+                auth=_transfer_auth,
+                join=_transfer_join,
+                is_local=_transfer_is_local,
+            ):
+                return
+
             parsed = urllib.parse.urlparse(self.path)
             host = self.client_address[0]
 

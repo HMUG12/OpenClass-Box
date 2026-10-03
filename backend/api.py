@@ -1264,17 +1264,37 @@ class Api:
     # ══════════════════════════════════════════════════════
     # 临时聊天传输（局域网平等会话，用完即走）
     # ══════════════════════════════════════════════════════
+    # 局域网临时文件传输
+    # ══════════════════════════════════════════════════════
+    #
+    # 2026-10 起并入手机控制台：同一个端口（38610）、同一个访问码。
+    # 原来这里是「临时聊天传输」——独立的 38620 服务 + 独立的房间码，
+    # 现在两码合一，聊天功能从界面移除（后端接口保留）。
+
+    def transfer_state(self) -> dict[str, Any]:
+        """传输状态：是否开启接收、已收文件、占用与配额、接收目录。"""
+        from .core.chat import transfer_state
+
+        return transfer_state()
+
+    def transfer_set_accepting(self, enabled: bool) -> dict[str, Any]:
+        """开启 / 关闭本机接收。
+
+        「开房间」这一步没有了：手机和其他电脑用**访问码**就能连，
+        这里只决定"我现在愿不愿意收"。
+        """
+        from .core.chat import set_accepting
+
+        return set_accepting(enabled)
 
     def chat_state(self) -> dict[str, Any]:
-        """临时会话状态（房间 / 成员 / 消息 / 收到文件的目录）。"""
-        from .core.chat import state
-
-        return state()
+        """旧接口：等价于 transfer_state（保留以兼容已发布的前端）。"""
+        return self.transfer_state()
 
     def chat_host(
         self, nickname: str = "我", room_name: str = "", password: str = ""
     ) -> dict[str, Any]:
-        """开一个临时房间（本机当主机）。"""
+        """旧接口：等价于「开启接收」（不再另起 38620 服务）。"""
         from .core.chat import host_room
 
         return host_room(nickname, room_name, password)
@@ -1282,13 +1302,13 @@ class Api:
     def chat_join(
         self, host: str, code: str, nickname: str = "同事", password: str = ""
     ) -> dict[str, Any]:
-        """加入别人的临时房间。"""
+        """连接另一台机器（电脑 ↔ 电脑）。``code`` 为对方的**访问码**。"""
         from .core.chat import join_room
 
         return join_room(host, code, nickname, password)
 
     def chat_send_text(self, text: str) -> dict[str, Any]:
-        """发送一条文字消息。"""
+        """发送一条文字消息。界面已不再暴露此功能，后端保留以便恢复。"""
         from .core.chat import send_text
 
         return send_text(text)
@@ -1320,13 +1340,13 @@ class Api:
         return save_file(file_id, name)
 
     def chat_leave(self, clear_files: bool = False) -> dict[str, Any]:
-        """退出房间（可选择清空临时文件）。"""
+        """断开连接 / 关闭接收（可选择清空已收文件）。"""
         from .core.chat import leave
 
         return leave(clear_files)
 
     def chat_clear_received(self) -> dict[str, Any]:
-        """清空临时聊天产生的文件。"""
+        """清空传输收到的文件。"""
         from .core.chat import clear_received
 
         return clear_received()

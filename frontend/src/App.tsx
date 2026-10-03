@@ -266,7 +266,7 @@ export default function App() {
     { id: 'lan', label: '机房管理', icon: <DesktopRegular fontSize={16} /> },
     // 「课堂」板块已并入「维护」（维护 → 课堂），此处不再单列
     { id: 'maintenance', label: '维护', icon: <ToolboxRegular fontSize={16} /> },
-    { id: 'chat', label: '临时传输', icon: <ChatRegular fontSize={16} /> },
+    { id: 'chat', label: '文件传输', icon: <ChatRegular fontSize={16} /> },
     { id: 'tasks', label: '定时任务', icon: <TimerRegular fontSize={16} /> },
     { id: 'tools', label: '工具箱', icon: <ToolboxRegular fontSize={16} />, badge: tools.length },
     { id: 'music', label: '音乐', icon: <MusicNote1Regular fontSize={16} /> },
