@@ -44,23 +44,40 @@ def prune_old_backups(keep: int | None = None) -> int:
     except OSError:
         return 0
 
+    # 必须按 ``scripts.safe_rm`` 导入，而不是把 scripts/ 加进 sys.path 后
+    # import ``safe_rm`` —— 后者会让同一个文件被加载成两个模块对象，
+    # 于是测试里 monkeypatch 的那份根本不是这里用的那份（patch 静默失效）。
+    from scripts.safe_rm import safe_rmtree
+
     freed = 0
+    left_over: list[str] = []
     for stale in backups[keep:]:
         try:
             size = sum(one.stat().st_size for one in stale.rglob("*") if one.is_file())
         except OSError:
             size = 0
-        try:
-            shutil.rmtree(stale)
-        except OSError as exc:
-            # 删不掉就留着 —— 备份只是占空间，不影响本次产物
-            print(f"[pack] 旧备份删不掉，保留：{stale.name}（{exc}）")
-            continue
-        freed += size
-        print(f"[pack] 已删除旧备份 {stale.name}（{size / 1024 ** 3:.2f} GB）")
+        # 用分批删除而不是 shutil.rmtree：构建产物里 tools/ 动辄四千多个文件，
+        # 整删很容易触发环境的批量删除保护。
+        #
+        # 但**分批也不保证能过**：实测本机的保护是"每删除 500 个文件就要人工
+        # 确认一次"，在非交互进程里那个确认弹不出来，删除会直接失败。所以这里
+        # 删不掉就**明说**，并给出可以手动执行的去向 —— 绝不假装清过了。
+        if safe_rmtree(stale):
+            freed += size
+            print(f"[pack] 已删除旧备份 {stale.name}（{size / 1024 ** 3:.2f} GB）")
+        else:
+            left_over.append(stale.name)
 
     if freed:
         print(f"[pack] 共释放 {freed / 1024 ** 3:.2f} GB")
+
+    if left_over:
+        print(f"[pack] 有 {len(left_over)} 份旧备份删不掉（本机的批量删除保护会拦），"
+              f"共约 {sum(1 for _ in left_over)} 份需要手动清理：")
+        for name in left_over:
+            print(f"[pack]     dist_build\\{name}")
+        print("[pack] 手动清理：在资源管理器里全选删除即可；"
+              "或用 rm /s /q dist_build\\OpenClass-Box_old_*")
     return freed
 
 

@@ -80,11 +80,16 @@ def test_undeletable_backup_is_skipped_not_fatal(dist, monkeypatch):
     """一份删不掉就跳过继续 —— 清理绝不能把打包带崩。
 
     这是这个函数存在的全部理由：某些环境会拦截批量删除，
-    旧实现因此干脆不删，代价是堆到 18 GB。
+    旧实现因此干脆不删，代价是堆到 19 GB。
 
     用 4 份备份（keep=2 → 该删 2 份）才能真正验证"跳过一份后继续处理下一份"：
     3 份时只有 1 份该删，拦下来就没有后续动作了。
+
+    注意 patch 的是 ``scripts.safe_rm.safe_rmtree`` —— pack 是在函数内 import 它的，
+    patch pack.shutil 不起作用（这条曾经骗过我们：测试全绿，真实环境照样删不掉）。
     """
+    from scripts import safe_rm
+
     for stamp in (
         "20260101_010000",
         "20260102_010000",
@@ -93,15 +98,15 @@ def test_undeletable_backup_is_skipped_not_fatal(dist, monkeypatch):
     ):
         _make_backup(dist, stamp, size=1024)
 
-    real_rmtree = pack.shutil.rmtree
+    real = safe_rm.safe_rmtree
     blocked = "OpenClass-Box_old_20260101_010000"
 
-    def fake_rmtree(target, *args, **kwargs):
+    def fake(target, *args, **kwargs):
         if Path(target).name == blocked:
-            raise OSError("模拟：被系统安全策略拦截")
-        return real_rmtree(target, *args, **kwargs)
+            return False          # 删不掉，但不该抛异常
+        return real(target)
 
-    monkeypatch.setattr(pack.shutil, "rmtree", fake_rmtree)
+    monkeypatch.setattr(safe_rm, "safe_rmtree", fake)
 
     freed = pack.prune_old_backups()   # 不应抛异常
 
@@ -112,6 +117,25 @@ def test_undeletable_backup_is_skipped_not_fatal(dist, monkeypatch):
     assert (dist / "OpenClass-Box_old_20260103_010000").is_dir()
     assert (dist / "OpenClass-Box_old_20260104_010000").is_dir()
     assert freed == 1024             # 只成功删了一份
+
+
+def test_undeletable_backups_are_reported_with_manual_hint(dist, monkeypatch, capsys):
+    """删不掉时必须**明说**，不能假装清过了。
+
+    真实环境的删除保护是非交互进程拦不住的 —— 这时唯一有用的输出
+    是"这 N 份没删掉，请手动处理"，而不是安静地跳过。
+    """
+    from scripts import safe_rm
+
+    for stamp in ("20260101_010000", "20260102_010000", "20260103_010000"):
+        _make_backup(dist, stamp, size=1024)
+    monkeypatch.setattr(safe_rm, "safe_rmtree", lambda target, *a, **k: False)
+
+    assert pack.prune_old_backups() == 0
+
+    out = capsys.readouterr().out
+    assert "删不掉" in out
+    assert "手动清理" in out or "手动" in out
 
 
 def test_respects_custom_keep(dist):
