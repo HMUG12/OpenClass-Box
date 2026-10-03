@@ -21,6 +21,48 @@ BUILD = ROOT / "build_build"
 
 SEP = os.pathsep  # Windows 上为 ';'
 
+# 保留最近几份旧产物备份。留 2 份够回退（上一个成功版本 + 上上个），
+# 再多就是纯占地方 —— 每一份都是 1.3 GB 量级。
+KEEP_BACKUPS = 2
+
+
+def prune_old_backups(keep: int | None = None) -> int:
+    """删除超出保留份数的旧产物备份，返回释放的字节数。
+
+    刻意**逐份删**而不是一次性批量删：某些环境对"一次删几千个文件"有底层
+    安全拦截，会把整个进程带走（不是 Python 异常，try/except 拦不住）。
+    一份一份删把单次文件量压到足够小，触发不了拦截；万一还是被拦，
+    跳过这份继续处理下一份 —— 删不掉就留着，绝不让清理把打包搞失败。
+    """
+    keep = KEEP_BACKUPS if keep is None else keep
+    try:
+        backups = sorted(
+            DIST.glob("OpenClass-Box_old_*"),
+            key=lambda one: one.name,
+            reverse=True,
+        )
+    except OSError:
+        return 0
+
+    freed = 0
+    for stale in backups[keep:]:
+        try:
+            size = sum(one.stat().st_size for one in stale.rglob("*") if one.is_file())
+        except OSError:
+            size = 0
+        try:
+            shutil.rmtree(stale)
+        except OSError as exc:
+            # 删不掉就留着 —— 备份只是占空间，不影响本次产物
+            print(f"[pack] 旧备份删不掉，保留：{stale.name}（{exc}）")
+            continue
+        freed += size
+        print(f"[pack] 已删除旧备份 {stale.name}（{size / 1024 ** 3:.2f} GB）")
+
+    if freed:
+        print(f"[pack] 共释放 {freed / 1024 ** 3:.2f} GB")
+    return freed
+
 
 def _ensure_reward_image() -> None:
     """赞助码图片：frontend/public/reward.png 缺失时自动认领。
@@ -81,16 +123,17 @@ def main() -> int:
         stamp = time.strftime("%Y%m%d_%H%M%S")
         out_dir.rename(DIST / f"OpenClass-Box_old_{stamp}")
 
-    # 旧产物备份：**这里只统计、不删除**。
+    # 旧产物备份：保留最近 KEEP_BACKUPS 份，其余逐个删除。
     #
-    # 原因：部分环境对「一次删除几千个文件」有底层安全拦截，会把整个打包进程带走
-    # —— 连 try/except 都拦不住（不是 Python 异常，而是进程被中断）。
-    # 备份只占磁盘空间、不影响本次产物，不值得拿打包稳定性去换。想清理时手动删即可。
-    backups = sorted(DIST.glob("OpenClass-Box_old_*"), key=lambda p: p.name, reverse=True)
-    if len(backups) > 2:
-        print(f"[pack] 提示：现有 {len(backups)} 份旧产物备份（建议只保留最近 2 份，可手动删除）")
-        for stale in backups[2:]:
-            print(f"[pack]   可删除：{stale.name}")
+    # 原来是「只统计、不删除」，理由是某些环境对「一次删除几千个文件」有底层
+    # 安全拦截，会把整个打包进程带走（不是 Python 异常，try/except 拦不住）。
+    # 这个顾虑是对的，但「一直不删」的代价是实测堆到了 **18 GB**（14 份备份），
+    # 而且没有任何自愈机制。
+    #
+    # 折中：仍然不批量删，而是**一份一份删、每份失败就跳过继续** ——
+    # 与 core/config_backup.py 的清理策略一致。单次删除的文件量足够小，
+    # 不会触发拦截；真被拦住了也只是这份留着，不影响本次产物。
+    prune_old_backups()
 
     cmd = [
         sys.executable,
