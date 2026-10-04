@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Spinner } from '@fluentui/react-components'
 import { api } from '../api'
+import UnifiedList from './UnifiedList'
 
 /**
  * 设备衰退监测与维护清单。
@@ -45,15 +46,8 @@ export default function HealthWatchPanel() {
     }
   }
 
-  const levelClass = (level: string) =>
-    level === 'replace' || level === 'warn'
-      ? 'oc-list-warn'
-      : level === 'watch'
-        ? 'oc-list-sub'
-        : 'oc-list-sub'
-
-  const actions: any[] = data?.actions ?? []
-
+  // 清单正文已改用 UnifiedList（与体检 / 课堂检测同一形状）。
+  // data.actions 仍保留在返回值里，供 A 端远程批量检查与报告使用。
   return (
     <div className="oc-panel" style={{ marginBottom: 12 }}>
       <div className="oc-panel-title">
@@ -92,43 +86,14 @@ export default function HealthWatchPanel() {
       )}
       {!busy && msg && <div className="oc-usage-sub">{msg}</div>}
 
-      {actions.length === 0 ? (
-        <div className="oc-hint" style={{ marginTop: 8 }}>
-          {data?.scannedAt
+      <UnifiedList
+        items={data?.unified}
+        emptyText={
+          data?.scannedAt
             ? '没有需要处理的项：磁盘读写无错误、温度正常、近期没有异常关机。'
-            : '还没有扫描过，点「重新扫描」生成维护清单。'}
-        </div>
-      ) : (
-        <div className="oc-list" style={{ marginTop: 8 }}>
-          {actions.map((item: any, index: number) => (
-            <div className="oc-list-row" key={index}>
-              <div className="oc-list-main">
-                <div className="oc-list-title">
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      minWidth: 62,
-                      marginRight: 8,
-                      color:
-                        item.level === 'replace' || item.level === 'warn'
-                          ? 'var(--oc-danger)'
-                          : 'var(--oc-warning)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {item.levelLabel}
-                  </span>
-                  {item.title}
-                </div>
-                <div className={levelClass(item.level)}>依据：{item.detail}</div>
-                <div className="oc-list-sub" style={{ marginTop: 2 }}>
-                  建议：{item.advice}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            : '还没有扫描过，点「重新扫描」生成维护清单。'
+        }
+      />
 
       {(data?.disks ?? []).length > 0 && (
         <div style={{ marginTop: 10 }}>

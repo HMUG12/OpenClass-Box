@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Spinner } from '@fluentui/react-components'
 import { api } from '../api'
+import UnifiedList from '../components/UnifiedList'
 
 export default function HealthPage() {
   const [result, setResult] = useState<any>(null)
@@ -122,21 +123,10 @@ export default function HealthPage() {
         </div>
 
         {result && !busy && (
-          <div className="oc-list">
-            {result.items.map((item: any) => (
-              <div className="oc-list-row" key={item.key}>
-                <div className="oc-list-main">
-                  <div className="oc-list-title">
-                    {item.ok ? '✅' : '⚠️'} {item.name}
-                  </div>
-                  <div className="oc-list-sub">{item.detail}</div>
-                  {!item.ok && item.suggest && (
-                    <div className="oc-list-warn">建议：{item.suggest}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <UnifiedList
+            items={result.unified}
+            emptyText="还没有检测结果，点「开始体检」跑一遍。"
+          />
         )}
 
         <div className="oc-actions" style={{ marginTop: 14, justifyContent: 'center' }}>

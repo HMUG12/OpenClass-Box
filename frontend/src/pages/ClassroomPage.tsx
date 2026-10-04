@@ -2,22 +2,8 @@ import { useEffect, useState } from 'react'
 import { Button, Spinner } from '@fluentui/react-components'
 import { api } from '../api'
 import KbPanel from '../components/KbPanel'
+import UnifiedList from '../components/UnifiedList'
 
-/** 状态圆点 */
-function Dot({ ok }: { ok: boolean }) {
-  return (
-    <span
-      style={{
-        width: 9,
-        height: 9,
-        borderRadius: '50%',
-        flex: '0 0 auto',
-        marginTop: 6,
-        background: ok ? 'var(--oc-positive)' : 'var(--oc-warning)',
-      }}
-    />
-  )
-}
 
 export default function ClassroomPage() {
   const [report, setReport] = useState<any>(null)
@@ -218,18 +204,10 @@ export default function ClassroomPage() {
           <Spinner size="tiny" /> 正在检测投影、触摸、无线投屏与教学软件…
         </div>
       ) : (
-        <div className="oc-list">
-          {items.map((item) => (
-            <div className="oc-list-row" key={item.key}>
-              <Dot ok={item.ok} />
-              <div className="oc-list-main">
-                <div className="oc-list-title">{item.name}</div>
-                <div className="oc-list-sub">{item.detail}</div>
-                {item.suggest && <div className="oc-list-warn">{item.suggest}</div>}
-              </div>
-            </div>
-          ))}
-        </div>
+        <UnifiedList
+          items={report?.unified}
+          emptyText="还没有检测结果，点「重新检测」跑一遍。"
+        />
       )}
 
       <div className="oc-panel" style={{ marginTop: 14 }}>

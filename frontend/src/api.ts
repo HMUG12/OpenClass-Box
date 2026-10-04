@@ -358,16 +358,16 @@ const MOCK_API: OcApi = {
   async webconsole_stop() { return { ok: true, message: '开发预览模式' } },
   async webconsole_regenerate() { return { ok: false, code: '', message: '开发预览模式' } },
   async health_watch_status() {
-    return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], counts: {}, disks: [], crashes: { count: 0, windowDays: 14 } }
+    return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], unified: [], unifiedSummary: { total: 0, issueCount: 0, headline: '' }, counts: {}, disks: [], crashes: { count: 0, windowDays: 14 } }
   },
   async restore_watch_check() {
     return { installed: false, level: 'ok', levelLabel: '正常', reasons: [], products: [], detail: '', advice: '' }
   },
   async health_watch_scan() {
-    return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], counts: {}, disks: [], crashes: { count: 0, windowDays: 14 }, message: '开发预览模式：未执行真实扫描' }
+    return { ok: true, scannedAt: '', level: 'ok', levelLabel: '正常', actions: [], unified: [], unifiedSummary: { total: 0, issueCount: 0, headline: '' }, counts: {}, disks: [], crashes: { count: 0, windowDays: 14 }, message: '开发预览模式：未执行真实扫描' }
   },
   async classroom_report() {
-    return { items: [], apps: [], total: 0 }
+    return { items: [], unified: [], unifiedSummary: { total: 0, issueCount: 0, headline: '' }, apps: [], total: 0 }
   },
   async refresh_teaching_apps() { return { items: [], detail: '开发预览模式：无法扫描' } },
   async open_touch_calibration() { return { ok: false, message: '开发预览模式：无法打开校准' } },
@@ -609,7 +609,7 @@ const MOCK_API: OcApi = {
   async stop_dynamic_wallpaper() { return { ok: true, message: '' } },
   async dynamic_wallpaper_status() { return { running: false, path: '', hasMpv: false } },
   async current_wallpaper() { return '' },
-  async run_health_checks() { return { items: [], okCount: 0, total: 0, healthy: false } },
+  async run_health_checks() { return { items: [], unified: [], unifiedSummary: { total: 0, issueCount: 0, headline: '' }, okCount: 0, total: 0, healthy: false } },
   async list_repairs() { return [] },
   async run_repair() { return { ok: false, message: '开发预览模式：无法执行修复', restart: false } },
   async export_report() { return { ok: false, path: '', content: '开发预览模式：无法导出报告' } },
