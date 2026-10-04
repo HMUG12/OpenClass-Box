@@ -25,6 +25,8 @@ import { api } from './api'
 import type { ThemeMode, ToolSpec } from './types'
 import TitleBar from './components/TitleBar'
 import ModePicker from './components/ModePicker'
+import { PlayerProvider } from './components/PlayerProvider'
+import PlayerBar from './components/PlayerBar'
 import SideNav, { type NavItem } from './components/SideNav'
 import DashboardPage from './pages/DashboardPage'
 import ToolsPage from './pages/ToolsPage'
@@ -364,6 +366,8 @@ export default function App() {
 
   return (
     <FluentProvider theme={isDark ? webDarkTheme : webLightTheme} className="oc-root">
+      {/* 播放器必须在页面之外：<audio> 挂在 Provider 里，切页不会销毁它 */}
+      <PlayerProvider>
       <TitleBar />
       <div className="oc-body">
         <SideNav
@@ -440,6 +444,8 @@ export default function App() {
       {showModePicker && (
         <ModePicker options={modeInfo?.options ?? []} onDone={() => void loadMode()} />
       )}
+      <PlayerBar />
+      </PlayerProvider>
     </FluentProvider>
   )
 }

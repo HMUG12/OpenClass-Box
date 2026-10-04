@@ -244,6 +244,10 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
 
   // ── 使用模式（自动 / 正常 / 专业）──
   const [modeInfo, setModeInfo] = useState<any>(null)
+  const hiddenPanels: string[] = modeInfo?.hiddenPanels ?? []
+  // 模式要藏的板块：加一个 class 让 CSS display:none。
+  // 用 class 而不是条件渲染，是因为一个条件里没法直接放多个兄弟元素
+  const hid = (id: string) => (hiddenPanels.includes(id) ? ' oc-hidden' : '')
   const [modeBusy, setModeBusy] = useState(false)
   const [modeMsg, setModeMsg] = useState('')
   const [modeMsgOk, setModeMsgOk] = useState(true)
@@ -965,10 +969,11 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         )}
       </div>
 
-      <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
+      {/* 机房相关：只有专业模式才显示（普通使用者不需要配置连通方式） */}
+            <div className={"oc-panel-title" + hid('settings.remote')} style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
         远程管理（机房）
       </div>
-      <div className="oc-panel" style={{ marginBottom: 12 }}>
+      <div className={"oc-panel" + hid('settings.remote')} style={{ marginBottom: 12 }}>
         <div className="oc-usage-sub" style={{ marginBottom: 10 }}>
           教师机与学生机之间的连通方式。同一网段留空即可自动发现；跨网段、走内网穿透或
           经过代理上网的环境，在下面填代理地址（学生机会经由该代理访问教师机）。
@@ -1225,10 +1230,10 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
         </div>
       </div>
 
-      <div className="oc-panel-title" style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
+      <div className={"oc-panel-title" + hid('settings.join')} style={{ fontSize: 12, opacity: 0.8, marginTop: 20 }}>
         被链接（B 端加入老师机）
       </div>
-      <div className="oc-panel" style={{ marginBottom: 12 }}>
+      <div className={"oc-panel" + hid('settings.join')} style={{ marginBottom: 12 }}>
         <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
           B 端只作为被管理端：填老师机地址与配对码即可接入（地址留空则在本局域网内自动发现）。
           接入后老师机可统一下发体检、修复、清理、消息、文件与壁纸；

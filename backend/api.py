@@ -932,11 +932,35 @@ class Api:
 
         return search_online(keyword, platform)
 
-    def fetch_music(self, song_id: str, platform: str = "netease") -> str:
-        """把在线音频拉取到本地，返回本地路径（失败返回空串）。"""
+    def fetch_music(
+        self, song_id: str, platform: str = "netease", name: str = "", artist: str = ""
+    ) -> str:
+        """把在线音频拉取到本地，返回本地路径（失败返回空串）。
+
+        name / artist 一起传下去写成元数据 —— 否则缓存列表里只有一串歌曲
+        ID，用户既认不出是什么歌，也没法按歌名搜索。
+        """
         from .core.music import fetch_online
 
-        return fetch_online(song_id, platform)
+        return fetch_online(song_id, platform, name, artist)
+
+    def music_cache_list(self) -> list[dict[str, Any]]:
+        """已下载的在线歌曲（可直接加入播放列表）。"""
+        from .core.music import cached_tracks
+
+        return cached_tracks()
+
+    def music_cache_delete(self, name: str) -> dict[str, Any]:
+        """删除一首下载缓存（只接受文件名，不接受路径）。"""
+        from .core.music import delete_cached
+
+        return delete_cached(name)
+
+    def music_cache_clear(self) -> dict[str, Any]:
+        """清空下载缓存。"""
+        from .core.music import clear_cache
+
+        return clear_cache()
 
     def list_wallpapers(self, directory: str = "") -> dict[str, Any]:
         """列出可用壁纸（图片 / 动图 / 视频，含导入目录）。"""

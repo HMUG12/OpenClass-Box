@@ -51,8 +51,14 @@ LABELS: dict[str, dict[str, str]] = {
     },
 }
 
-# 自动化模式下隐藏的页面
+# 自动化模式下隐藏的页面（页面级）
 HIDDEN_IN_AUTO = ("hardware", "lan", "maintenance", "tasks")
+
+# 设置页里要按模式隐藏的板块（panel 级）。
+# 「正常」模式也隐藏 —— 一个普通使用者不需要配置机房连通、也不需要知道自己
+# 是 A 端还是 B 端；那些是给电教和维修人员用的，放出来只会让人不知道该填什么。
+HIDDEN_IN_NORMAL = ("settings.remote", "settings.join")
+HIDDEN_IN_AUTO_PANELS = HIDDEN_IN_NORMAL
 
 # 专业化才展开的细节区块（前端按这个开关显示）
 PRO_ONLY_BLOCKS = ("command", "rawData", "eventLog", "processList", "manualRepair")
@@ -92,6 +98,9 @@ def set_mode(mode: str) -> dict[str, Any]:
         "mode": value,
         "label": LABELS[value]["label"],
         "hiddenPages": list(HIDDEN_IN_AUTO) if value == AUTO else [],
+        "hiddenPanels": list(HIDDEN_IN_AUTO_PANELS) if value == AUTO else (
+            list(HIDDEN_IN_NORMAL) if value == NORMAL else []
+        ),
     }
 
 
@@ -110,6 +119,22 @@ def page_visible(page_id: str) -> bool:
     return True
 
 
+def panel_visible(panel_id: str) -> bool:
+    """设置页里的某个板块在当前模式下是否显示（只有专业模式全开）。"""
+    mode = current()
+    if mode == PRO:
+        return True
+    hidden = HIDDEN_IN_AUTO_PANELS if mode == AUTO else HIDDEN_IN_NORMAL
+    return panel_id not in hidden
+
+
+def _hidden_panels() -> list[str]:
+    mode = current()
+    if mode == PRO:
+        return []
+    return list(HIDDEN_IN_AUTO_PANELS if mode == AUTO else HIDDEN_IN_NORMAL)
+
+
 def describe() -> dict[str, Any]:
     """给前端的完整描述：当前模式、各模式说明、可见性。"""
     mode = current()
@@ -119,6 +144,7 @@ def describe() -> dict[str, Any]:
         "label": LABELS[mode]["label"],
         "isFirstRun": is_first_run(),
         "hiddenPages": list(HIDDEN_IN_AUTO) if mode == AUTO else [],
+        "hiddenPanels": _hidden_panels(),
         "proOnlyBlocks": list(PRO_ONLY_BLOCKS) if mode == PRO else [],
         "options": [
             {"id": one, **LABELS[one]} for one in MODES

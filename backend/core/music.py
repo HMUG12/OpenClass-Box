@@ -15,6 +15,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .paths import config_dir
+
 AUDIO_SUFFIXES = {".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac", ".opus"}
 
 _MIME = {
@@ -43,7 +45,12 @@ def library_dirs() -> list[Path]:
 
 
 def _is_allowed(path: Path) -> bool:
-    for base in _allowed:
+    """只放行两类路径：扫描过的曲库目录、下载缓存目录。
+
+    缓存目录必须一起放行 —— 否则刚下载的歌会因为"不在曲库里"而播不了，
+    这正是它之前只能靠混进 ~/Music 才能播放的原因。
+    """
+    for base in [*_allowed, cache_dir()]:
         try:
             path.resolve().relative_to(base.resolve())
             return True
@@ -69,7 +76,12 @@ def scan_library(extra_dirs: list[str] | None = None, force: bool = False) -> li
 
     items: list[dict[str, Any]] = []
     scanned = 0
+    # 旧版把下载缓存放在 ~/Music/OpenClass-Box，现在挪到了配置目录。
+    # 那里剩下一堆 netease_数字.mp3，混在曲库里既认不出也删不掉 —— 跳过。
+    stale_cache = Path(os.path.expanduser("~")) / "Music" / "OpenClass-Box"
     for base in _allowed:
+        if base == stale_cache or stale_cache in base.parents:
+            continue
         try:
             for p in base.rglob("*"):
                 scanned += 1
@@ -204,14 +216,23 @@ def search_online(keyword: str, platform: str = "netease", limit: int = 20) -> l
     return []
 
 
-def fetch_online(song_id: str, platform: str = "netease") -> str:
-    """把在线音频拉取到本地缓存目录，返回本地路径（失败返回空串）。"""
+def fetch_online(
+    song_id: str,
+    platform: str = "netease",
+    name: str = "",
+    artist: str = "",
+) -> str:
+    """把在线音频拉取到下载缓存目录，返回本地路径（失败返回空串）。
+
+    缓存目录从 ~/Music/OpenClass-Box 挪到配置目录下的 music_cache：混在用户
+    曲库里既认不出歌名（文件名是歌曲 ID），也会被当成本地文件而删不掉。
+    旧位置不做迁移 —— 那里本来就是一堆认不出的 ID 文件。
+    """
     if platform != "netease" or not song_id:
         return ""
 
-    cache_dir = Path(os.path.expanduser("~")) / "Music" / "OpenClass-Box"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    dest = cache_dir / f"netease_{song_id}.mp3"
+    folder = cache_dir()
+    dest = folder / f"netease_{song_id}.mp3"
     if dest.is_file():
         return str(dest)
 
@@ -222,4 +243,138 @@ def fetch_online(song_id: str, platform: str = "netease") -> str:
     if not data:
         return ""
     dest.write_bytes(data)
+    # 写一份元数据：否则缓存列表里只有一串歌曲 ID，认不出是什么歌
+    try:
+        import json as _json
+
+        _meta_path(dest).write_text(
+            _json.dumps(
+                {
+                    "id": song_id,
+                    "name": (name or "").strip() or f"网易云 {song_id}",
+                    "artist": (artist or "").strip(),
+                    "platform": "netease",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except (OSError, TypeError, ValueError):
+        pass
     return str(dest)
+
+# ══════════════════════════════════════════════════════════════
+# 下载缓存管理
+# ══════════════════════════════════════════════════════════════
+#
+# 为什么不直接丢在 ~/Music 里：那样做有两个真实问题
+#   1. 文件名是 netease_123456.mp3，用户在"本地曲库"里看到的是一串数字，
+#      既认不出歌也删不掉（那是应用的文件）；
+#   2. 它靠 rglob 碰运气被扫到 —— 曲库文件一多（上限 8000）就扫不到，
+#      于是"下载过的歌在本地曲库里找不到"。
+#
+# 现在缓存单独一个目录 + 一份元数据，可以在界面上查看、播放、删除。
+
+
+def cache_dir() -> Path:
+    folder = config_dir() / "music_cache"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return folder
+
+
+def _meta_path(audio: Path) -> Path:
+    return audio.with_suffix(audio.suffix + ".json")
+
+
+def cached_tracks() -> list[dict[str, Any]]:
+    """已下载的在线歌曲（带歌名 / 歌手，可直接加入播放列表）。"""
+    import json as _json
+
+    items: list[dict[str, Any]] = []
+    folder = cache_dir()
+    try:
+        files = [one for one in folder.iterdir() if one.suffix.lower() in AUDIO_SUFFIXES]
+    except OSError:
+        return items
+
+    for audio in sorted(files, key=lambda one: one.stat().st_mtime if one.exists() else 0, reverse=True):
+        meta: dict[str, Any] = {}
+        try:
+            meta = _json.loads(_meta_path(audio).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # 没有元数据（早期下载或被手动拷进来）：用文件名兜底，别让它消失
+            stem = audio.stem
+            song_id = stem.split("_", 1)[1] if "_" in stem else stem
+            meta = {"name": stem, "artist": "", "id": song_id}
+        try:
+            size = audio.stat().st_size
+            mtime = int(audio.stat().st_mtime)
+        except OSError:
+            continue
+        items.append(
+            {
+                "path": str(audio),
+                "name": str(meta.get("name") or audio.stem),
+                "artist": str(meta.get("artist") or ""),
+                "platform": str(meta.get("platform") or "netease"),
+                "id": str(meta.get("id") or ""),
+                "size": size,
+                "at": mtime,
+            }
+        )
+    return items
+
+
+def delete_cached(name: str) -> dict[str, Any]:
+    """删除一首缓存（连同它的元数据）。
+
+    只按**文件名**在缓存目录里找，绝不接受路径 —— 否则这个接口就是个
+    "删任意文件"的入口。
+    """
+    target_name = Path(str(name or "")).name
+    if not target_name or target_name.startswith("."):
+        return {"ok": False, "message": "文件名不合法"}
+    target = cache_dir() / target_name
+    try:
+        resolved = target.resolve()
+        if cache_dir().resolve() not in resolved.parents:
+            return {"ok": False, "message": "只能删除缓存目录里的文件"}
+    except OSError as exc:
+        return {"ok": False, "message": f"路径校验失败：{exc}"}
+    if not target.is_file():
+        return {"ok": False, "message": "缓存里没有这一首"}
+    try:
+        target.unlink()
+    except OSError as exc:
+        return {"ok": False, "message": f"删除失败：{exc}"}
+    try:
+        _meta_path(target).unlink()
+    except OSError:
+        pass
+    return {"ok": True, "message": f"已删除 {target_name}"}
+
+
+def clear_cache() -> dict[str, Any]:
+    """清空整个下载缓存。"""
+    import json as _json
+
+    folder = cache_dir()
+    removed = 0
+    freed = 0
+    try:
+        entries = list(folder.iterdir())
+    except OSError as exc:
+        return {"ok": False, "message": f"读取缓存目录失败：{exc}"}
+    for one in entries:
+        if one.is_file():
+            try:
+                freed += one.stat().st_size
+                one.unlink()
+                removed += 1
+            except OSError:
+                continue
+    return {"ok": True, "removed": removed, "freed": freed,
+            "message": f"已清理 {removed} 个缓存文件（{freed / 1024 / 1024:.1f} MB）"}

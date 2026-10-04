@@ -208,7 +208,10 @@ export interface OcApi {
   search_music(keyword?: string): Promise<any[]>
   music_url(path: string): Promise<string>
   search_music_online(keyword: string, platform?: string): Promise<any[]>
-  fetch_music(song_id: string, platform?: string): Promise<string>
+  fetch_music(song_id: string, platform?: string, name?: string, artist?: string): Promise<string>
+  music_cache_list(): Promise<any[]>
+  music_cache_delete(name: string): Promise<any>
+  music_cache_clear(): Promise<any>
   list_wallpapers(directory?: string): Promise<any>
   set_wallpaper(path: string, style?: string, scale?: number): Promise<any>
   random_wallpaper(directory?: string): Promise<any>
@@ -618,6 +621,9 @@ const MOCK_API: OcApi = {
   async music_url(path) { return path },
   async search_music_online() { return [] },
   async fetch_music() { return '' },
+  async music_cache_list() { return [] },
+  async music_cache_delete() { return { ok: false, message: '开发预览模式' } },
+  async music_cache_clear() { return { ok: false, message: '开发预览模式' } },
   async list_wallpapers() { return { items: [], importedDir: '' } },
   async set_wallpaper() { return { ok: false, message: '开发预览模式：无法设置壁纸' } },
   async random_wallpaper() { return { ok: false, message: '' } },

@@ -212,3 +212,37 @@ def test_should_run_only_in_auto_mode(monkeypatch):
     assert auto_tasks.should_run_on_start() is True
     _cfg(monkeypatch, {"ui_mode": "normal", "ui_mode_configured": True})
     assert auto_tasks.should_run_on_start() is False
+
+# ── 模式：设置页板块可见性 ───────────────────────────────
+
+
+def test_normal_hides_machine_settings(monkeypatch):
+    """普通使用者不需要配置机房连通，也不需要知道自己是 A 端还是 B 端。
+
+    放出来只会让人对着"教师机地址 / 代理"不知道怎么填。
+    """
+    _cfg(monkeypatch, {"ui_mode": "normal", "ui_mode_configured": True})
+    assert mode.panel_visible("settings.remote") is False
+    assert mode.panel_visible("settings.join") is False
+    assert set(mode.describe()["hiddenPanels"]) == {"settings.remote", "settings.join"}
+
+
+def test_pro_shows_everything(monkeypatch):
+    _cfg(monkeypatch, {"ui_mode": "pro", "ui_mode_configured": True})
+    assert mode.panel_visible("settings.remote") is True
+    assert mode.panel_visible("settings.join") is True
+    assert mode.describe()["hiddenPanels"] == []
+
+
+def test_auto_hides_machine_settings_too(monkeypatch):
+    _cfg(monkeypatch, {"ui_mode": "auto", "ui_mode_configured": True})
+    assert mode.panel_visible("settings.remote") is False
+    # 自动化模式下"维护"整页没了，但它在设置里的这两块仍应按同一规则隐藏
+    assert mode.page_visible("maintenance") is False
+
+
+def test_other_panels_stay_visible(monkeypatch):
+    """别把别的设置也一起藏了 —— 只针对明确列出的那两块。"""
+    _cfg(monkeypatch, {"ui_mode": "normal", "ui_mode_configured": True})
+    for panel in ("settings.appearance", "settings.mobile", "settings.storage"):
+        assert mode.panel_visible(panel) is True, panel
