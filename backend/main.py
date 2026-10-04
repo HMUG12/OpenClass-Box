@@ -366,6 +366,19 @@ class AppHost:
         except Exception:
             pass
 
+        # 自动化模式：开机自己跑一轮（巡检 + 清理 + 整理内存 + 建议）。
+        # 放后台线程是必须的 —— 这一轮要几十秒（巡检含课堂检测），
+        # 放启动流程里会让窗口迟迟不出来，看起来就像"软件卡住了"。
+        try:
+            from .core.auto_tasks import run_startup_tasks, should_run_on_start
+
+            if should_run_on_start():
+                threading.Thread(
+                    target=run_startup_tasks, daemon=True, name="oc-auto-tasks"
+                ).start()
+        except Exception:
+            pass
+
         # 启动角色：A 端（服务端）自动拉起管理服务；B 端恢复客户端身份
         if role and role != "auto":
             try:

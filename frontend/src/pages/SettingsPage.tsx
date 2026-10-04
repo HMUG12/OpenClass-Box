@@ -242,6 +242,68 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
   const [consoleBusy, setConsoleBusy] = useState(false)
   const [consoleMsg, setConsoleMsg] = useState('')
 
+  // ── 使用模式（自动 / 正常 / 专业）──
+  const [modeInfo, setModeInfo] = useState<any>(null)
+  const [modeBusy, setModeBusy] = useState(false)
+  const [modeMsg, setModeMsg] = useState('')
+  const [modeMsgOk, setModeMsgOk] = useState(true)
+  const [autoBusy, setAutoBusy] = useState(false)
+
+  const loadMode = async () => {
+    try {
+      setModeInfo(await api.get_mode())
+    } catch {
+      /* 开发预览模式忽略 */
+    }
+  }
+
+  useEffect(() => {
+    void loadMode()
+  }, [])
+
+  const switchMode = async (id: string) => {
+    if (id === modeInfo?.mode) return
+    setModeBusy(true)
+    setModeMsg('')
+    try {
+      const result = await api.set_mode(id)
+      if (result?.ok === false) {
+        setModeMsgOk(false)
+        setModeMsg(result.message ?? '切换失败')
+      } else {
+        setModeMsgOk(true)
+        setModeMsg('已切换，下方菜单会立即变化')
+        await loadMode()
+        // 通知 App 重算菜单可见性
+        window.dispatchEvent(new Event('oc-mode-changed'))
+      }
+    } catch (e) {
+      setModeMsgOk(false)
+      setModeMsg(`切换失败：${e}`)
+    } finally {
+      setModeBusy(false)
+    }
+  }
+
+  const runAutoNow = async () => {
+    setAutoBusy(true)
+    setModeMsg('')
+    try {
+      const result = await api.run_auto_tasks()
+      setModeMsgOk(Boolean(result?.ok))
+      const steps = result?.steps ?? {}
+      const bits = Object.keys(steps)
+        .map((k) => `${k}: ${steps[k]?.message ?? steps[k]?.verdictLabel ?? '完成'}`)
+        .join('；')
+      setModeMsg(result?.ok ? `已完成（${result.elapsed} 秒）· ${bits}` : `部分失败 · ${bits}`)
+    } catch (e) {
+      setModeMsgOk(false)
+      setModeMsg(`执行失败：${e}`)
+    } finally {
+      setAutoBusy(false)
+    }
+  }
+
   // ── 版本与更新 ──
   const [version, setVersion] = useState('')
   const [selfUpdate, setSelfUpdate] = useState<any>(null)
@@ -565,6 +627,64 @@ export default function SettingsPage({ themeMode, setThemeMode }: Props) {
             <div className="oc-toolcard-desc">{o.desc}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── 使用模式 ── */}
+      <div className="oc-panel" style={{ marginTop: 12, marginBottom: 12 }}>
+        <div className="oc-panel-title">使用模式</div>
+        <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+          决定左侧菜单里出现哪些页面，以及开机时要不要自动跑一轮检查与清理。
+          三种模式的检测能力完全相同，只差"显示什么"和"要不要自动做事"。
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {(modeInfo?.options ?? []).map((one: any) => (
+            <div
+              key={one.id}
+              onClick={() => void switchMode(one.id)}
+              style={{
+                cursor: modeBusy ? 'default' : 'pointer',
+                padding: '9px 12px',
+                borderRadius: 8,
+                border:
+                  modeInfo?.mode === one.id
+                    ? '1px solid var(--oc-accent)'
+                    : '1px solid var(--oc-border)',
+                background: modeInfo?.mode === one.id ? 'var(--oc-accent-soft)' : 'transparent',
+                opacity: modeBusy ? 0.6 : 1,
+              }}
+            >
+              <div className="oc-list-title" style={{ fontSize: 14 }}>
+                {one.label}
+                {modeInfo?.mode === one.id && '（当前）'}
+              </div>
+              <div className="oc-list-sub">{one.summary}</div>
+            </div>
+          ))}
+        </div>
+        {modeMsg && (
+          <div className={modeMsgOk ? 'oc-list-sub' : 'oc-list-warn'} style={{ marginTop: 8 }}>
+            {modeMsg}
+          </div>
+        )}
+        {modeInfo?.mode === 'auto' && (
+          <>
+            <div className="oc-hint" style={{ marginTop: 10 }}>
+              自动化模式每次开机后会跑一轮：巡检、清临时文件、整理内存；
+              自启项与高占用进程**只给建议不动手**。下一次开机自动执行，
+              也可以现在点一下立刻跑。
+            </div>
+            <div className="oc-actions" style={{ marginTop: 8 }}>
+              <Button
+                size="small"
+                appearance="secondary"
+                disabled={autoBusy}
+                onClick={() => void runAutoNow()}
+              >
+                {autoBusy ? '正在执行…' : '立即执行一轮'}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── 外观自定义：配色 / 圆角 / 字号 / 毛玻璃 ── */}

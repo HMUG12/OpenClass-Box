@@ -24,6 +24,7 @@ import {
 import { api } from './api'
 import type { ThemeMode, ToolSpec } from './types'
 import TitleBar from './components/TitleBar'
+import ModePicker from './components/ModePicker'
 import SideNav, { type NavItem } from './components/SideNav'
 import DashboardPage from './pages/DashboardPage'
 import ToolsPage from './pages/ToolsPage'
@@ -85,6 +86,41 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null)
   const [version, setVersion] = useState('')
   const [hasUpdate, setHasUpdate] = useState(false)
+
+  // 使用模式（自动 / 正常 / 专业）：决定左侧菜单里出现哪些页面。
+  // 首次启动会弹出选择框（ModePicker），之后可在「设置」里改
+  const [modeInfo, setModeInfo] = useState<any>(null)
+  const [showModePicker, setShowModePicker] = useState(false)
+
+  const loadMode = useCallback(async () => {
+    try {
+      const info = await api.get_mode()
+      setModeInfo(info)
+      if (info?.isFirstRun) setShowModePicker(true)
+      return info
+    } catch {
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadMode()
+  }, [loadMode])
+
+  // 切换模式后要判断当前页是否被藏了 —— 不跳走的话会停在一片空白上，
+  // 而且用户可能根本不知道刚才发生了什么
+  useEffect(() => {
+    const hidden: string[] = modeInfo?.hiddenPages ?? []
+    if (hidden.includes(page)) setPage('dashboard')
+  }, [modeInfo, page])
+
+  // 设置页改完模式后广播一下，让菜单重新过滤（沿用项目里
+  // oc-passcode-locked 那套事件约定，避免为此引入一层 context）
+  useEffect(() => {
+    const handler = () => void loadMode()
+    window.addEventListener('oc-mode-changed', handler)
+    return () => window.removeEventListener('oc-mode-changed', handler)
+  }, [loadMode])
 
   // 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）：读取偏好并应用到根元素。
   // 与主题（浅色 / 深色 / 跟随系统）相互独立，两者叠加决定最终观感
@@ -260,6 +296,10 @@ export default function App() {
   }, [])
 
   // 顺序约定：系统状态 / 硬件信息 固定在前两位；安全 / 设置 / 关于 固定在最后三位
+  //
+  // 自动化模式会藏掉其中四项（硬件信息 / 机房管理 / 维护 / 定时任务）——
+  // 隐藏清单由后端给出（core/mode.py），前端不自己写一份，避免两边漂移
+  const hiddenPages: string[] = modeInfo?.hiddenPages ?? []
   const navItems: NavItem[] = [
     { id: 'dashboard', label: '系统状态', icon: <GaugeRegular fontSize={16} /> },
     { id: 'hardware', label: '硬件信息', icon: <HardDriveRegular fontSize={16} /> },
@@ -279,7 +319,7 @@ export default function App() {
       badge: hasUpdate ? 1 : undefined,
     },
     { id: 'about', label: '关于', icon: <InfoRegular fontSize={16} /> },
-  ]
+  ].filter((item) => !hiddenPages.includes(item.id))
 
   const renderPage = () => {
     switch (page) {
@@ -397,6 +437,9 @@ export default function App() {
         </div>
       </div>
 
+      {showModePicker && (
+        <ModePicker options={modeInfo?.options ?? []} onDone={() => void loadMode()} />
+      )}
     </FluentProvider>
   )
 }

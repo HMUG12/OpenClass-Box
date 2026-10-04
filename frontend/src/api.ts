@@ -120,6 +120,10 @@ export interface OcApi {
   diagnostic_report(): Promise<any>
   preflight(): Promise<any>
   preflight_last(): Promise<any>
+  get_mode(): Promise<any>
+  set_mode(mode: string): Promise<any>
+  run_auto_tasks(): Promise<any>
+  auto_tasks_last(): Promise<any>
   transfer_state(): Promise<any>
   transfer_set_accepting(enabled: boolean): Promise<any>
   report_frontend_error(message: string): Promise<any>
@@ -452,6 +456,20 @@ const MOCK_API: OcApi = {
   async config_backup_restore() {
     return { ok: false, message: '开发预览模式：未执行真实恢复' }
   },
+  async get_mode() {
+    return {
+      ok: true, mode: 'normal', label: '正常', isFirstRun: false,
+      hiddenPages: [], proOnlyBlocks: [],
+      options: [
+        { id: 'auto', label: '自动化', summary: '', detail: '' },
+        { id: 'normal', label: '正常', summary: '', detail: '' },
+        { id: 'pro', label: '专业', summary: '', detail: '' },
+      ],
+    }
+  },
+  async set_mode() { return { ok: false, message: '开发预览模式：未执行真实切换' } },
+  async run_auto_tasks() { return { ok: false, message: '开发预览模式：未执行真实任务' } },
+  async auto_tasks_last() { return { ok: false, hasResult: false, message: '还没有自动执行过' } },
   async preflight_last() {
     return { ok: false, checkedAt: '', verdict: '', verdictLabel: '', headline: '', message: '还没有检查过' }
   },

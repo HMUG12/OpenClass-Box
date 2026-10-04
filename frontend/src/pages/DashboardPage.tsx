@@ -27,6 +27,14 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/** 开机任务各步骤的中文名（与后端 core/auto_tasks.py 的步骤 key 对应）。 */
+const AUTO_STEP_LABELS: Record<string, string> = {
+  checkup: '巡检',
+  cleanup: '清理临时文件',
+  memory: '整理内存',
+  startup: '开机自启（仅建议）',
+  highUsage: '高占用进程（仅建议）',
+}
 export default function DashboardPage() {
   const [hardware, setHardware] = useState<HardwareInfo | null>(null)
   const [metrics, setMetrics] = useState<Metrics | null>(null)
@@ -41,6 +49,33 @@ export default function DashboardPage() {
   const [pre, setPre] = useState<any>(null)
   const [preBusy, setPreBusy] = useState(false)
   const [preMsg, setPreMsg] = useState('')
+
+  // ── 开机自动化结果：只在自动化模式下显示 ──
+  // 这里不自动跑（那是开机时的事），只把上次的执行结果摊开给用户看 ——
+  // 自动化最怕的是「默默做了但没人知道做了什么」
+  const [autoInfo, setAutoInfo] = useState<any>(null)
+  const [autoResult, setAutoResult] = useState<any>(null)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const mode = await api.get_mode()
+        setAutoInfo(mode)
+        if (mode?.mode === 'auto') setAutoResult(await api.auto_tasks_last())
+      } catch {
+        /* 忽略 */
+      }
+    })()
+  }, [])
+
+  const autoSteps: any[] = Object.entries(autoResult?.steps ?? {}).map(
+    ([key, value]: [string, any]) => ({
+      key,
+      label: AUTO_STEP_LABELS[key] ?? key,
+      ok: Boolean(value?.ok),
+      text: value?.message ?? value?.verdictLabel ?? '',
+    })
+  )
 
   useEffect(() => {
     void (async () => {
@@ -168,6 +203,42 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── 开机自动化做了什么：自动化模式下才显示 ── */}
+      {autoInfo?.mode === 'auto' && (
+        <div className="oc-panel" style={{ marginBottom: 12 }}>
+          <div className="oc-panel-title">开机自动做了什么</div>
+          {autoResult?.hasResult ? (
+            <>
+              <div className="oc-usage-sub" style={{ marginBottom: 8 }}>
+                {autoResult.startedAt} 执行，用时 {autoResult.elapsed} 秒
+                {autoResult.failedSteps?.length
+                  ? ` · ${autoResult.failedSteps.length} 项没成功`
+                  : ' · 全部完成'}
+              </div>
+              <div className="oc-list">
+                {autoSteps.map((one) => (
+                  <div className="oc-list-row" key={one.key}>
+                    <div className="oc-list-main">
+                      <div className="oc-list-title">
+                        {one.ok ? '✅' : '⚠️'} {one.label}
+                      </div>
+                      {one.text && <div className="oc-list-sub">{one.text}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="oc-hint" style={{ marginTop: 8 }}>
+                自启项与高占用进程只列出来、不会自动处理 —— 要改请到「安全」页。
+              </div>
+            </>
+          ) : (
+            <div className="oc-usage-sub">
+              还没有自动执行过。每次开机后会自动跑一轮，结果会显示在这里。
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 课前准备：打开第一眼就知道能不能上课 ── */}
       <div className="oc-panel" style={{ marginBottom: 12 }}>

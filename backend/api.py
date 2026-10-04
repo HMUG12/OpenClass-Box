@@ -576,6 +576,35 @@ class Api:
 
         return report()
 
+    # ══════════════════════════════════════════════════════
+    # 使用模式与开机自动化
+    # ══════════════════════════════════════════════════════
+
+    def get_mode(self) -> dict[str, Any]:
+        """当前使用模式、首次启动标记、各模式说明与页面可见性。"""
+        from .core.mode import describe
+
+        return describe()
+
+    def set_mode(self, mode: str) -> dict[str, Any]:
+        """切换使用模式（自动 / 正常 / 专业）。"""
+        from .core.mode import set_mode as _set
+
+        return _set(mode)
+
+    @timed("开机自动化")
+    def run_auto_tasks(self) -> dict[str, Any]:
+        """手动跑一轮开机任务（设置页里点「立即执行」，不必等下次开机）。"""
+        from .core.auto_tasks import run_startup_tasks
+
+        return run_startup_tasks()
+
+    def auto_tasks_last(self) -> dict[str, Any]:
+        """上次开机任务的结果（首页显示用）。"""
+        from .core.auto_tasks import last
+
+        return last()
+
     @timed("课前准备")
     def preflight(self) -> dict[str, Any]:
         """课前准备：一次点击回答"这台机器现在能不能上课"（体检 + 课堂 + 还原保护）。
