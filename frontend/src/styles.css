@@ -1177,19 +1177,22 @@ button:active {
   left: 0;
   right: 0;
   bottom: 0;
+  /* isolation 把播放条与页面内容隔成独立层：否则 fixed 元素上的
+     半透明背景 + backdrop-filter 会把底下的深色内容透上来，
+     鼠标划过时整条会闪一下黑。 */
+  isolation: isolate;
   z-index: 900;
-  background: var(--oc-surface, rgba(255, 255, 255, 0.94));
+  background: var(--oc-surface, #fff);
   border-top: 1px solid var(--oc-border);
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08);
   padding: 6px 14px 8px;
   font-size: 12.5px;
+  /* 明确不吃 hover 变色：整条是容器，不该有点击反馈 */
+  transition: none;
 }
 
-[data-glass='on'] .oc-playerbar {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-}
+/* 播放条不做毛玻璃：它是常驻在最上层的固定元素，半透明 + 背景模糊在
+   WebView2 上会出现渲染残留（鼠标划过时闪黑）。宁可实色，稳最重要。 */
 
 .oc-playerbar-row {
   display: flex;
@@ -1250,12 +1253,6 @@ button:active {
   margin-top: 4px;
   color: #e0a020;
   font-size: 12px;
-}
-
-.oc-playerbar-volume {
-  width: 90px;
-  margin-top: 4px;
-  accent-color: var(--oc-accent);
 }
 
 /* 播放列表：向上展开的面板 */

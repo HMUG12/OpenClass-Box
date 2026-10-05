@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "startedAt": "2026-10-05 11:19:32",
+  "elapsed": 0.0,
+  "failedSteps": [],
+  "steps": {
+    "checkup": {
+      "ok": true,
+      "verdictLabel": "可以上课",
+      "at": "11:19:32"
+    },
+    "cleanup": {
+      "ok": true,
+      "message": "已清理 12 项",
+      "at": "11:19:32"
+    },
+    "memory": {
+      "ok": true,
+      "message": "x",
+      "at": "11:19:32"
+    },
+    "startup": {
+      "ok": true,
+      "count": 3,
+      "at": "11:19:32"
+    },
+    "highUsage": {
+      "ok": true,
+      "count": 0,
+      "at": "11:19:32"
+    }
+  }
+}

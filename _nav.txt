@@ -1,0 +1,38 @@
+  // ── 队列推进（纯函数，不在 setState 的 updater 里做副作用）──
+  const goto = useCallback(
+    (at: number, list: Track[]) => {
+      if (!list.length) return
+      const bounded = ((at % list.length) + list.length) % list.length
+      const target = list[bounded]
+      if (!target) return
+      setIndex(bounded)
+      void load(target)
+    },
+    [load]
+  )
+
+  const next = useCallback(() => {
+    if (mode === 'one' && current) {
+      // 单曲循环：重播本曲
+      void load(current)
+      return
+    }
+    if (mode === 'shuffle' && queue.length > 1) {
+      let pick = index
+      while (pick === index) pick = Math.floor(Math.random() * queue.length)
+      goto(pick, queue)
+      return
+    }
+    goto(index + 1, queue)
+  }, [current, goto, index, load, mode, queue])
+
+  const prev = useCallback(() => {
+    // 播放超过 3 秒时先回到本曲开头 —— 播放器的通用行为
+    const audio = audioRef.current
+    if (audio && audio.currentTime > 3) {
+      audio.currentTime = 0
+      setProgress(0)
+      return
+    }
+    goto(index - 1, queue)
+  }, [goto, index, queue])

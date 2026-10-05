@@ -127,7 +127,17 @@ export default function PlayerBar() {
         </div>
 
         <div className="oc-playerbar-right">
-          <span className="oc-playerbar-time">{at}/{p.queue.length}</span>
+          <span className="oc-playerbar-time">音量 {Math.round(p.volume * 100)}%</span>
+          <Slider
+            min={0}
+            max={100}
+            value={Math.round(p.volume * 100)}
+            onChange={(_e, data) => p.setVolume(data.value / 100)}
+            style={{ width: 84 }}
+          />
+          <span className="oc-playerbar-time">
+            {at}/{p.queue.length}
+          </span>
           <Button
             size="small"
             appearance={showQueue ? 'primary' : 'subtle'}
@@ -139,17 +149,6 @@ export default function PlayerBar() {
       </div>
 
       {p.message && <div className="oc-playerbar-msg">{p.message}</div>}
-      {p.queue.length > 1 && (
-        <input
-          className="oc-playerbar-volume"
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(p.volume * 100)}
-          onChange={(e) => p.setVolume(Number(e.target.value) / 100)}
-          title={`音量 ${Math.round(p.volume * 100)}%`}
-        />
-      )}
     </div>
   )
 }

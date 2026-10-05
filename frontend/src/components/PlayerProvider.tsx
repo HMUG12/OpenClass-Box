@@ -62,6 +62,17 @@ export function usePlayer(): PlayerApi {
  */
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // 队列/索引/模式的最新快照。
+  //
+  // 为什么需要它：onEnded 是在 useEffect(..., []) 里注册的，闭包**只捕获首次
+  // 渲染时**的那几个值 —— 不管歌单怎么变、怎么循环，它看到的永远是初始的
+  // index=-1 和空队列。所以自动下一首必须读这个 ref，而不是闭包变量。
+  const snap = useRef<{ queue: Track[]; index: number; mode: PlayMode }>({
+    queue: [],
+    index: -1,
+    mode: 'list',
+  })
   const [queue, setQueue] = useState<Track[]>([])
   const [index, setIndex] = useState(-1)
   const [playing, setPlaying] = useState(false)
@@ -72,6 +83,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState('')
 
   const current = index >= 0 && index < queue.length ? queue[index] : null
+
+  // 每次渲染都刷新快照，供 useEffect(..., []) 里注册的 onEnded 读取最新队列
+  snap.current = { queue, index, mode }
 
   // ── 装载 <audio>：整个应用生命周期内只挂一次 ──
   useEffect(() => {
@@ -84,7 +98,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onMeta = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
     const onPlay = () => setPlaying(true)
     const onPause = () => setPlaying(false)
-    const onEnded = () => setPlaying(false)
+    // 一首播完必须**自动推进**，否则「单曲循环 / 随机播放」切了也没用 ——
+    // 之前这里只 setPlaying(false)，歌放完就停在那儿了。
+    const onEnded = () => {
+      setPlaying(false)
+      const s = snap.current
+      const list = s.queue
+      if (!list.length) return
+      if (s.mode === 'one') {
+        const again = list[s.index] ?? list[0]
+        if (again) void load(again)
+        return
+      }
+      let at: number
+      if (s.mode === 'shuffle' && list.length > 1) {
+        at = Math.floor(Math.random() * list.length)
+        if (at === s.index) at = (at + 1) % list.length   // 别立刻又放同一首
+      } else {
+        at = (s.index + 1) % list.length                   // 顺序：循环播放
+      }
+      const target = list[at]
+      if (target) {
+        setIndex(at)
+        void load(target)
+      }
+    }
     const onError = () => {
       setPlaying(false)
       setMessage('这首歌播不了（文件可能已被移动或删除）')
@@ -179,45 +217,44 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setDuration(0)
   }, [])
 
-  const step = useCallback(
-    (delta: number) => {
-      setQueue((old) => {
-        if (!old.length) return old
-        let next = index + delta
-        if (mode === 'shuffle' && old.length > 1) {
-          next = Math.floor(Math.random() * old.length)
-        } else if (next < 0) {
-          next = 0
-        } else if (next >= old.length) {
-          next = mode === 'one' ? index : 0
-        }
-        if (old[next]) {
-          setIndex(next)
-          void load(old[next])
-        }
-        return old
-      })
+  // ── 队列推进 ──
+  // 注意不要把副作用写进 setQueue 的 updater 里：updater 必须是纯函数，
+  // React 在严格模式下会调用两次，那样会连着播两次。
+  const goto = useCallback(
+    (at: number, list: Track[]) => {
+      if (!list.length) return
+      const bounded = ((at % list.length) + list.length) % list.length
+      const target = list[bounded]
+      if (!target) return
+      setIndex(bounded)
+      void load(target)
     },
-    [index, load, mode]
+    [load]
   )
 
   const next = useCallback(() => {
     if (mode === 'one' && current) {
-      void load(current)
+      void load(current)          // 单曲循环：重播本曲
       return
     }
-    step(1)
-  }, [current, load, mode, step])
+    if (mode === 'shuffle' && queue.length > 1) {
+      let pick = index
+      while (pick === index) pick = Math.floor(Math.random() * queue.length)
+      goto(pick, queue)
+      return
+    }
+    goto(index + 1, queue)        // 顺序：到末尾回到第一首
+  }, [current, goto, index, load, mode, queue])
 
   const prev = useCallback(() => {
-    // 播放超过 3 秒时，「上一首」先回到本曲开头 —— 这是播放器的通用行为
+    // 播放超过 3 秒时，「上一首」先回到本曲开头 —— 播放器的通用行为
     if (audioRef.current && audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0
       setProgress(0)
       return
     }
-    step(-1)
-  }, [step])
+    goto(index - 1, queue)
+  }, [goto, index, queue])
 
   const toggle = useCallback(() => {
     const audio = audioRef.current

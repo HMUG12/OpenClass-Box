@@ -1704,12 +1704,28 @@ class Api:
 
     # ── 外观自定义（配色 / 圆角 / 字号 / 毛玻璃）────────────
 
+    # 外观的合法取值。读取时用它挡住脏值 —— 曾经前端把一个 dict 传给了期望
+    # 字符串的参数，配置里存下 str(dict)，界面就一直匹配不到任何配色。
+    _ACCENTS = ("default", "peach", "mint", "lemon", "sakura", "grape", "sky", "coral")
+    _RADII = ("compact", "standard", "round")
+    _FONTS = ("small", "standard", "large")
+
     def get_appearance(self) -> dict[str, Any]:
-        """界面外观偏好（前端把它映射成 .oc-root 上的 data-* 属性）。"""
+        """界面外观偏好（前端把它映射成 .oc-root 上的 data-* 属性）。
+
+        每一项都过一遍白名单：配置可能被手改坏，而一个非法的配色 id 会让
+        整个外观都匹配不上，表现就是"改了没反应、重启又变回去"。
+        宁可退回默认，也不要整块失效。
+        """
+
+        def pick(key: str, allowed: tuple[str, ...], fallback: str) -> str:
+            value = str(config.get(key, fallback) or fallback).strip()
+            return value if value in allowed else fallback
+
         return {
-            "accent": str(config.get("appearance_accent", "default") or "default"),
-            "radius": str(config.get("appearance_radius", "standard") or "standard"),
-            "font": str(config.get("appearance_font", "standard") or "standard"),
+            "accent": pick("appearance_accent", self._ACCENTS, "default"),
+            "radius": pick("appearance_radius", self._RADII, "standard"),
+            "font": pick("appearance_font", self._FONTS, "standard"),
             "glass": bool(config.get("appearance_glass", False)),
         }
 
@@ -1720,18 +1736,37 @@ class Api:
         font: str | None = None,
         glass: bool | None = None,
     ) -> dict[str, Any]:
-        """保存外观偏好（每一项独立可选，如实返回落盘结果）。"""
+        """保存外观偏好（每一项独立可选，如实返回落盘结果）。
+
+        第一个参数**也接受一个 dict**：前端习惯把要改的项打包成对象传过来
+        （set_appearance({accent: 'peach'})），而这里原本是四个位置参数。
+        结果那个 dict 被当成 accent 字符串存进配置，存成了 "{'glass': False}"
+        这种东西 —— 外观从此不再生效，而读回来时匹配不到任何配色，整个外观
+        看起来就像"被重置了"。两种形式都收下，别再被签名不一致坑一次。
+        """
+        if isinstance(accent, dict):
+            payload = accent
+            accent = payload.get("accent")
+            radius = payload.get("radius", radius)
+            font = payload.get("font", font)
+            glass = payload.get("glass", glass)
+
         ok = True
         if accent is not None:
+            if str(accent) not in self._ACCENTS:
+                return {"ok": False, "message": f"unknown accent: {accent}"}
             ok = bool(config.set("appearance_accent", str(accent))) and ok
         if radius is not None:
+            if str(radius) not in self._RADII:
+                return {"ok": False, "message": f"unknown radius: {radius}"}
             ok = bool(config.set("appearance_radius", str(radius))) and ok
         if font is not None:
+            if str(font) not in self._FONTS:
+                return {"ok": False, "message": f"unknown font: {font}"}
             ok = bool(config.set("appearance_font", str(font))) and ok
         if glass is not None:
             ok = bool(config.set("appearance_glass", bool(glass))) and ok
         return {"ok": ok, "appearance": self.get_appearance()}
-
     def launch_tool(self, tool_id: str, file_path: str | None = None) -> dict[str, Any]:
         spec = registry.get(tool_id)
         if spec is None:
