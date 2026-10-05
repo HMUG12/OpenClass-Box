@@ -67,3 +67,6 @@ release/
 # playwright-cli 的临时产物（浏览器实测时生成）
 nav.yaml
 .playwright-cli/
+
+# pytest 备用临时目录（本机系统 TEMP 权限被拒时用 --basetemp 指定）
+.pt*/
